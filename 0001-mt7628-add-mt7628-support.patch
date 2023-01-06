@@ -1,0 +1,490 @@
+From 32af70b985e5180980b06fe7278dcc1fc6db9977 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Fri, 6 Jan 2023 20:04:38 +0800
+Subject: [PATCH] mt7628: add mt7628 support
+
+---
+ configs/devices/mips-softmmu/common.mak |   1 +
+ hw/mips/Kconfig                         |   4 +
+ hw/mips/meson.build                     |   1 +
+ hw/mips/mt7628.c                        | 194 ++++++++++++++++++++++++
+ hw/misc/meson.build                     |   3 +
+ hw/misc/mt7628-sysctrl.c                | 141 +++++++++++++++++
+ include/hw/misc/mt7628-sysctrl.h        |  66 ++++++++
+ 7 files changed, 410 insertions(+)
+ create mode 100644 hw/mips/mt7628.c
+ create mode 100644 hw/misc/mt7628-sysctrl.c
+ create mode 100644 include/hw/misc/mt7628-sysctrl.h
+
+diff --git a/configs/devices/mips-softmmu/common.mak b/configs/devices/mips-softmmu/common.mak
+index 416161f833..29f6869906 100644
+--- a/configs/devices/mips-softmmu/common.mak
++++ b/configs/devices/mips-softmmu/common.mak
+@@ -32,6 +32,7 @@ CONFIG_MIPS_ITU=y
+ CONFIG_MALTA=y
+ CONFIG_PCNET_PCI=y
+ CONFIG_MIPSSIM=y
++CONFIG_MT7628=y
+ CONFIG_ACPI_SMBUS=y
+ CONFIG_SMBUS_EEPROM=y
+ CONFIG_TEST_DEVICES=y
+diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
+index 725525358d..1a33d54167 100644
+--- a/hw/mips/Kconfig
++++ b/hw/mips/Kconfig
+@@ -8,6 +8,10 @@ config MIPSSIM
+     select SERIAL_ISA
+     select MIPSNET
+ 
++config MT7628
++    bool
++    select SERIAL
++
+ config JAZZ
+     bool
+     select ISA_BUS
+diff --git a/hw/mips/meson.build b/hw/mips/meson.build
+index dd0101ad4d..d8b9ce9bab 100644
+--- a/hw/mips/meson.build
++++ b/hw/mips/meson.build
+@@ -10,6 +10,7 @@ mips_ss.add(when: 'CONFIG_JAZZ', if_true: files('jazz.c'))
+ mips_ss.add(when: 'CONFIG_MIPSSIM', if_true: files('mipssim.c'))
+ mips_ss.add(when: 'CONFIG_FULOONG', if_true: files('fuloong2e.c'))
+ mips_ss.add(when: 'CONFIG_MIPS_BOSTON', if_true: [files('boston.c'), fdt])
++mips_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628.c'))
+ endif
+ 
+ hw_arch += {'mips': mips_ss}
+diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
+new file mode 100644
+index 0000000000..cbf5fe48a8
+--- /dev/null
++++ b/hw/mips/mt7628.c
+@@ -0,0 +1,194 @@
++/*
++ * QEMU/mt7628 emulation
++ *
++ * Copyright (c) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "qemu/osdep.h"
++#include "qapi/error.h"
++#include "qemu/datadir.h"
++#include "hw/clock.h"
++#include "hw/mips/mips.h"
++#include "hw/mips/cpudevs.h"
++#include "sysemu/sysemu.h"
++#include "hw/boards.h"
++#include "hw/mips/bios.h"
++#include "hw/loader.h"
++#include "hw/char/serial.h"
++#include "elf.h"
++#include "hw/sysbus.h"
++#include "hw/qdev-properties.h"
++#include "qemu/error-report.h"
++#include "sysemu/qtest.h"
++#include "sysemu/reset.h"
++
++static struct _loaderparams {
++    int ram_size;
++    const char *kernel_filename;
++    const char *kernel_cmdline;
++    const char *initrd_filename;
++} loaderparams;
++
++typedef struct ResetData {
++    MIPSCPU *cpu;
++    uint64_t vector;
++} ResetData;
++
++static uint64_t load_kernel(void)
++{
++    uint64_t entry, kernel_high, initrd_size;
++    long kernel_size;
++    ram_addr_t initrd_offset;
++
++    kernel_size = load_elf(loaderparams.kernel_filename, NULL,
++                           cpu_mips_kseg0_to_phys, NULL,
++                           &entry, NULL,
++                           &kernel_high, NULL, 0,
++                           EM_MIPS, 1, 0);
++    if (kernel_size < 0) {
++        error_report("could not load kernel '%s': %s",
++                     loaderparams.kernel_filename,
++                     load_elf_strerror(kernel_size));
++        exit(1);
++    }
++
++    /* load initrd */
++    initrd_size = 0;
++    initrd_offset = 0;
++    if (loaderparams.initrd_filename) {
++        initrd_size = get_image_size(loaderparams.initrd_filename);
++        if (initrd_size > 0) {
++            initrd_offset = ROUND_UP(kernel_high, INITRD_PAGE_SIZE);
++            if (initrd_offset + initrd_size > loaderparams.ram_size) {
++                error_report("memory too small for initial ram disk '%s'",
++                             loaderparams.initrd_filename);
++                exit(1);
++            }
++            initrd_size = load_image_targphys(loaderparams.initrd_filename,
++                initrd_offset, loaderparams.ram_size - initrd_offset);
++        }
++        if (initrd_size == (target_ulong) -1) {
++            error_report("could not load initial ram disk '%s'",
++                         loaderparams.initrd_filename);
++            exit(1);
++        }
++    }
++    return entry;
++}
++
++static void main_cpu_reset(void *opaque)
++{
++    ResetData *s = (ResetData *)opaque;
++    CPUMIPSState *env = &s->cpu->env;
++
++    cpu_reset(CPU(s->cpu));
++    env->active_tc.PC = s->vector & ~(target_ulong)1;
++    if (s->vector & 1) {
++        env->hflags |= MIPS_HFLAG_M16;
++    }
++}
++
++static void
++mips_mt7628_init(MachineState *machine)
++{
++    const char *kernel_filename = machine->kernel_filename;
++    const char *kernel_cmdline = machine->kernel_cmdline;
++    const char *initrd_filename = machine->initrd_filename;
++    Clock *cpuclk;
++    MIPSCPU *cpu;
++    CPUMIPSState *env;
++    ResetData *reset_info;
++    MemoryRegion *address_space_mem = get_system_memory();
++    (void)address_space_mem;
++
++    if (machine->ram_size > 0x10000000) {
++        /* Device starting at address 0x10000000,
++         * and memory cannot overlap with devices.
++         * Refuse to run rather than behaving very confusingly.
++         */
++        error_report("mt7628: memory size must not exceed 256MB");
++        exit(1);
++    }
++
++    cpuclk = clock_new(OBJECT(machine), "cpu-refclk");
++    clock_set_hz(cpuclk, 580000000); /* 580 MHz */
++
++    /* Init CPUs. */
++    cpu = mips_cpu_create_with_clock(machine->cpu_type, cpuclk);
++    env = &cpu->env;
++
++    reset_info = g_new0(ResetData, 1);
++    reset_info->cpu = cpu;
++    reset_info->vector = env->active_tc.PC;
++    qemu_register_reset(main_cpu_reset, reset_info);
++
++    if (kernel_filename) {
++        loaderparams.ram_size = machine->ram_size;
++        loaderparams.kernel_filename = kernel_filename;
++        loaderparams.kernel_cmdline = kernel_cmdline;
++        loaderparams.initrd_filename = initrd_filename;
++        reset_info->vector = load_kernel();
++    }
++
++    /* Init CPU internal devices. */
++    cpu_mips_irq_init_cpu(cpu);
++    cpu_mips_clock_init(cpu);
++
++    /* DDR 256 MiB */
++    memory_region_add_subregion(address_space_mem, 0, machine->ram);
++
++    /* mt7628 sysctrl */
++    DeviceState *sysctrl = qdev_new("mt7628-sysctrl");
++    sysbus_realize_and_unref(SYS_BUS_DEVICE(sysctrl), &error_fatal);
++    sysbus_mmio_map(SYS_BUS_DEVICE(sysctrl), 0, 0x10000000);
++
++    /* uartlite (ns16550a compatible) */
++    if (serial_hd(0)) {
++        serial_mm_init(address_space_mem, 0x10000C00, 2, env->irq[28],
++                115200, serial_hd(0), DEVICE_NATIVE_ENDIAN);
++    }
++    /* uart 1 (ns16550a compatible) */
++    if (serial_hd(1)) {
++        serial_mm_init(address_space_mem, 0x10000D00, 2, env->irq[29], 
++                115200, serial_hd(1), DEVICE_NATIVE_ENDIAN);
++    }
++    /* uart 2 (ns16550a compatible) */ 
++    if (serial_hd(2)) {
++        serial_mm_init(address_space_mem, 0x10000E00, 2, env->irq[30], 
++                115200, serial_hd(2), DEVICE_NATIVE_ENDIAN);
++    }
++
++    /* TODO */
++    /* spi */
++    /* spi nor flash */
++    /* usb phy */
++    /* usb host */
++}
++
++static void mips_mt7628_machine_init(MachineClass *mc)
++{
++    mc->desc = "Mediatek MT7628";
++    mc->init = mips_mt7628_init;
++    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("24KEc");
++    mc->default_ram_id = "mips_mt7628.ram";
++}
++
++DEFINE_MACHINE("mt7628", mips_mt7628_machine_init)
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index ed0598dc9e..3717ed9f04 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -137,3 +137,6 @@ softmmu_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+ 
+ # HPPA devices
+ softmmu_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
++
++# mt7628
++softmmu_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628-sysctrl.c'))
+diff --git a/hw/misc/mt7628-sysctrl.c b/hw/misc/mt7628-sysctrl.c
+new file mode 100644
+index 0000000000..335d97ff6c
+--- /dev/null
++++ b/hw/misc/mt7628-sysctrl.c
+@@ -0,0 +1,141 @@
++/*
++ * Mediatek mt7628 System Control emulation
++ *
++ * Copyright (C) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "qemu/osdep.h"
++#include "qemu/units.h"
++#include "hw/sysbus.h"
++#include "migration/vmstate.h"
++#include "qemu/log.h"
++#include "qemu/module.h"
++#include "hw/misc/mt7628-sysctrl.h"
++
++#define REG_INDEX(offset)   (offset / sizeof(uint32_t))
++
++/* System Control register offsets */
++/* from linux kernel arch/mips/include/asm/mach-ralink/mt7620.h */
++enum {
++    REG_CHIP_NAME0     = 0x00,
++    REG_CHIP_NAME1     = 0x04,
++    REG_EFUSE_CFG      = 0x08,
++    REG_CHIP_REV       = 0x0C,
++    REG_SYSTEM_CONFIG0 = 0x10,
++    REG_SYSTEM_CONFIG1 = 0x14,
++};
++
++static uint64_t mt7628_sysctrl_read(void *opaque, hwaddr offset,
++                                          unsigned size)
++{
++    const mt7628SysCtrlState *s = MT7628_SYSCTRL(opaque);
++    const uint32_t idx = REG_INDEX(offset);
++
++    if (idx >= MT7628_SYSCTRL_REGS_NUM) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: out-of-bounds offset 0x%04x\n",
++                      __func__, (uint32_t)offset);
++        return 0;
++    }
++
++    return s->regs[idx];
++}
++
++static void mt7628_sysctrl_write(void *opaque, hwaddr offset,
++                                       uint64_t val, unsigned size)
++{
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(opaque);
++    const uint32_t idx = REG_INDEX(offset);
++
++    if (idx >= MT7628_SYSCTRL_REGS_NUM) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: out-of-bounds offset 0x%04x\n",
++                      __func__, (uint32_t)offset);
++        return;
++    }
++
++    switch (offset) {
++    default:
++        s->regs[idx] = (uint32_t) val;
++        break;
++    }
++}
++
++static const MemoryRegionOps mt7628_sysctrl_ops = {
++    .read = mt7628_sysctrl_read,
++    .write = mt7628_sysctrl_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .valid = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++    .impl.min_access_size = 4,
++};
++
++static void mt7628_sysctrl_reset(DeviceState *dev)
++{
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(dev);
++
++    /* Set default values for registers */
++    /* dump from real mt7628 board */
++    s->regs[REG_INDEX(REG_CHIP_NAME0)]     = 0x3637544d;
++    s->regs[REG_INDEX(REG_CHIP_NAME1)]     = 0x20203832;
++    s->regs[REG_INDEX(REG_EFUSE_CFG)]      = 0x01010000;
++    s->regs[REG_INDEX(REG_CHIP_REV)]       = 0x00010102;
++    s->regs[REG_INDEX(REG_SYSTEM_CONFIG0)] = 0x00144144;
++}
++
++static void mt7628_sysctrl_init(Object *obj)
++{
++    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(obj);
++
++    /* Memory mapping */
++    memory_region_init_io(&s->iomem, OBJECT(s), &mt7628_sysctrl_ops, s,
++                           TYPE_MT7628_SYSCTRL, MT7628_SYSCTRL_REGS_MAXADDR);
++    sysbus_init_mmio(sbd, &s->iomem);
++}
++
++static const VMStateDescription mt7628_sysctrl_vmstate = {
++    .name = "mt7628-sysctrl",
++    .version_id = 1,
++    .minimum_version_id = 1,
++    .fields = (VMStateField[]) {
++        VMSTATE_UINT32_ARRAY(regs, mt7628SysCtrlState, MT7628_SYSCTRL_REGS_NUM),
++        VMSTATE_END_OF_LIST()
++    }
++};
++
++static void mt7628_sysctrl_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->reset = mt7628_sysctrl_reset;
++    dc->vmsd = &mt7628_sysctrl_vmstate;
++}
++
++static const TypeInfo mt7628_sysctrl_info = {
++    .name          = TYPE_MT7628_SYSCTRL,
++    .parent        = TYPE_SYS_BUS_DEVICE,
++    .instance_init = mt7628_sysctrl_init,
++    .instance_size = sizeof(mt7628SysCtrlState),
++    .class_init    = mt7628_sysctrl_class_init,
++};
++
++static void mt7628_sysctrl_register(void)
++{
++    type_register_static(&mt7628_sysctrl_info);
++}
++
++type_init(mt7628_sysctrl_register)
+diff --git a/include/hw/misc/mt7628-sysctrl.h b/include/hw/misc/mt7628-sysctrl.h
+new file mode 100644
+index 0000000000..836dbdd5aa
+--- /dev/null
++++ b/include/hw/misc/mt7628-sysctrl.h
+@@ -0,0 +1,66 @@
++/*
++ * Mediatek mt7628 System Control emulation
++ *
++ * Copyright (C) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef HW_MISC_MT7628_SYSCTRL_H
++#define HW_MISC_MT7628_SYSCTRL_H
++
++#include "qom/object.h"
++#include "hw/sysbus.h"
++
++/**
++ * @name Constants
++ * @{
++ */
++
++/** Highest register address used by System Control device */
++#define MT7628_SYSCTRL_REGS_MAXADDR   (0x100)
++
++/** Total number of known registers */
++#define MT7628_SYSCTRL_REGS_NUM       ((MT7628_SYSCTRL_REGS_MAXADDR / \
++                                      sizeof(uint32_t)) + 1)
++
++/** @} */
++
++/**
++ * @name Object model
++ * @{
++ */
++
++#define TYPE_MT7628_SYSCTRL    "mt7628-sysctrl"
++OBJECT_DECLARE_SIMPLE_TYPE(mt7628SysCtrlState, MT7628_SYSCTRL)
++
++/** @} */
++
++/**
++ * mt7628 System Control object instance state
++ */
++struct mt7628SysCtrlState {
++    /*< private >*/
++    SysBusDevice parent_obj;
++    /*< public >*/
++
++    /** Maps I/O registers in physical memory */
++    MemoryRegion iomem;
++
++    /** Array of hardware registers */
++    uint32_t regs[MT7628_SYSCTRL_REGS_NUM];
++
++};
++
++#endif /* HW_MISC_MT7628_SYSCTRL_H */
+-- 
+2.38.1
+

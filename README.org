@@ -1,0 +1,65 @@
+* qemu mt7628
+
+I'm try add mt7628 support into qemu.
+
+* how to run it
+
+1. use buildroot build firmware: https://github.com/newluhux/vocore2/tree/master/buildroot-2022.02.6
+
+2. get qemu source tree and apply patch
+
+#+BEGIN_SRC shell
+ git clone https://gitlab.com/qemu-project/qemu /path/to/qemu
+ cd /path/to/qemu/
+ git am < xxxx.patch
+#+END_SRC
+
+3. build qemu
+
+#+BEGIN_SRC shell
+ cd /path/to/qemu/
+ ./configure --cc=gcc --cxx=g++ \
+		--target-list=mipsel-softmmu \
+		--enable-debug --enable-debug-tcg --enable-debug-info
+ make -j$(nproc)
+ make check
+#+END_SRC
+
+4. run qemu:
+
+#+BEGIN_SRC shell
+ cd /path/to/qemu/
+ ./qemu-system-mipsel -M mt7628 -m 128 \
+		-serial file:uart0 \
+		-serial file:uart1 \
+		-serial file:uart2 \
+		-kernel /path/to/buildroot/output/build/linux-VERSION/vmlinux \
+		-s -S
+#+END_SRC
+
+5. how to debug
+
+ref: https://www.qemu.org/docs/master/system/gdb.html
+
+start gdb:
+
+#+BEGIN_SRC shell
+ /path/to/buildroot/output/host/bin/mipsel-linux-gdb \
+    path/to/buildroot/output/build/linux-VERSION/vmlinux
+#+END_SRC
+
+set gdb target:
+
+#+BEGIN_SRC text
+ target remote localhost:1234
+#+END_SRC
+
+then use 'c'(continue) or 's'(step) or other gdb command to debug it.
+
+* license
+
+same with qemu
+
+* history
+
+2022/01/06:  UART is working.
