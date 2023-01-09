@@ -44,8 +44,8 @@ ref: https://www.qemu.org/docs/master/system/gdb.html
 start gdb:
 
 #+BEGIN_SRC shell
- /path/to/buildroot/output/host/bin/mipsel-linux-gdb \
-    path/to/buildroot/output/build/linux-VERSION/vmlinux
+ cd /path/to/buildroot/output/build/linux-VERSION/
+ /path/to/buildroot/output/host/bin/mipsel-linux-gdb vmlinux
 #+END_SRC
 
 set gdb target:
@@ -63,3 +63,5 @@ same with qemu
 * history
 
 2022/01/06:  UART is working.
+
+2022/01/09:  add unimp memory region mapping.

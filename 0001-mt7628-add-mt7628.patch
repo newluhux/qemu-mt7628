@@ -1,19 +1,21 @@
-From 32af70b985e5180980b06fe7278dcc1fc6db9977 Mon Sep 17 00:00:00 2001
+From 4f354e7e8b1b3397f1510e33b8e5976ad60f5c34 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Fri, 6 Jan 2023 20:04:38 +0800
-Subject: [PATCH] mt7628: add mt7628 support
+Subject: [PATCH] mt7628: add mt7628
 
 ---
  configs/devices/mips-softmmu/common.mak |   1 +
- hw/mips/Kconfig                         |   4 +
+ hw/mips/Kconfig                         |   5 +
  hw/mips/meson.build                     |   1 +
- hw/mips/mt7628.c                        | 194 ++++++++++++++++++++++++
+ hw/mips/mt7628.c                        | 218 ++++++++++++++++++++++++
  hw/misc/meson.build                     |   3 +
- hw/misc/mt7628-sysctrl.c                | 141 +++++++++++++++++
- include/hw/misc/mt7628-sysctrl.h        |  66 ++++++++
- 7 files changed, 410 insertions(+)
+ hw/misc/mt7628-sysctrl.c                | 141 +++++++++++++++
+ include/hw/mips/mt7628.h                |  46 +++++
+ include/hw/misc/mt7628-sysctrl.h        |  66 +++++++
+ 8 files changed, 481 insertions(+)
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 hw/misc/mt7628-sysctrl.c
+ create mode 100644 include/hw/mips/mt7628.h
  create mode 100644 include/hw/misc/mt7628-sysctrl.h
 
 diff --git a/configs/devices/mips-softmmu/common.mak b/configs/devices/mips-softmmu/common.mak
@@ -29,16 +31,17 @@ index 416161f833..29f6869906 100644
  CONFIG_SMBUS_EEPROM=y
  CONFIG_TEST_DEVICES=y
 diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
-index 725525358d..1a33d54167 100644
+index 725525358d..70cc995f3c 100644
 --- a/hw/mips/Kconfig
 +++ b/hw/mips/Kconfig
-@@ -8,6 +8,10 @@ config MIPSSIM
+@@ -8,6 +8,11 @@ config MIPSSIM
      select SERIAL_ISA
      select MIPSNET
  
 +config MT7628
 +    bool
 +    select SERIAL
++    select UNIMP
 +
  config JAZZ
      bool
@@ -57,10 +60,10 @@ index dd0101ad4d..d8b9ce9bab 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..cbf5fe48a8
+index 0000000000..9cf1e698a3
 --- /dev/null
 +++ b/hw/mips/mt7628.c
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,218 @@
 +/*
 + * QEMU/mt7628 emulation
 + *
@@ -85,23 +88,52 @@ index 0000000000..cbf5fe48a8
 + * THE SOFTWARE.
 + */
 +
++
 +#include "qemu/osdep.h"
 +#include "qapi/error.h"
 +#include "qemu/datadir.h"
 +#include "hw/clock.h"
 +#include "hw/mips/mips.h"
 +#include "hw/mips/cpudevs.h"
++#include "hw/char/serial.h"
++#include "hw/misc/unimp.h"
 +#include "sysemu/sysemu.h"
 +#include "hw/boards.h"
 +#include "hw/mips/bios.h"
 +#include "hw/loader.h"
-+#include "hw/char/serial.h"
 +#include "elf.h"
 +#include "hw/sysbus.h"
 +#include "hw/qdev-properties.h"
 +#include "qemu/error-report.h"
 +#include "sysemu/qtest.h"
 +#include "sysemu/reset.h"
++#include "hw/mips/mt7628.h"
++
++/* Memory map */
++const hwaddr mt7628_memmap[] = {
++    [MT7628_DEV_DDR]     = 0x00000000,
++    [MT7628_DEV_SYSCTRL] = 0x10000000,
++    [MT7628_DEV_UART0]   = 0x10000C00,
++    [MT7628_DEV_UART1]   = 0x10000D00,
++    [MT7628_DEV_UART2]   = 0x10000E00,
++};
++
++struct mt7628Unimplemented {
++    const char *device_name;
++    hwaddr base;
++    hwaddr size;
++} unimplemented[] = {
++    { "timer",        0x10000100, 0xFF },
++    { "intc",         0x10000200, 0xFF },
++    { "memc",         0x10000300, 0xFF },
++    { "rbus",         0x10000400, 0xFF },
++    { "mips-cnt",     0x10000500, 0xFF },
++    { "gpio",         0x10000600, 0xFF },
++    { "spi-slave",    0x10000700, 0xFF },
++    { "i2c",          0x10000900, 0xFF },
++    { "i2s",          0x10000A00, 0xFF },
++    { "spi-master",   0x10000B00, 0xFF },
++};
 +
 +static struct _loaderparams {
 +    int ram_size;
@@ -179,17 +211,6 @@ index 0000000000..cbf5fe48a8
 +    MIPSCPU *cpu;
 +    CPUMIPSState *env;
 +    ResetData *reset_info;
-+    MemoryRegion *address_space_mem = get_system_memory();
-+    (void)address_space_mem;
-+
-+    if (machine->ram_size > 0x10000000) {
-+        /* Device starting at address 0x10000000,
-+         * and memory cannot overlap with devices.
-+         * Refuse to run rather than behaving very confusingly.
-+         */
-+        error_report("mt7628: memory size must not exceed 256MB");
-+        exit(1);
-+    }
 +
 +    cpuclk = clock_new(OBJECT(machine), "cpu-refclk");
 +    clock_set_hz(cpuclk, 580000000); /* 580 MHz */
@@ -215,40 +236,46 @@ index 0000000000..cbf5fe48a8
 +    cpu_mips_irq_init_cpu(cpu);
 +    cpu_mips_clock_init(cpu);
 +
-+    /* DDR 256 MiB */
-+    memory_region_add_subregion(address_space_mem, 0, machine->ram);
++    /* ddr */
++    memory_region_add_subregion(get_system_memory(),
++                                mt7628_memmap[MT7628_DEV_DDR],
++                                machine->ram);
 +
-+    /* mt7628 sysctrl */
++    /* system control */
 +    DeviceState *sysctrl = qdev_new("mt7628-sysctrl");
 +    sysbus_realize_and_unref(SYS_BUS_DEVICE(sysctrl), &error_fatal);
-+    sysbus_mmio_map(SYS_BUS_DEVICE(sysctrl), 0, 0x10000000);
++    sysbus_mmio_map(SYS_BUS_DEVICE(sysctrl), 0,
++                    mt7628_memmap[MT7628_DEV_SYSCTRL]);
 +
-+    /* uartlite (ns16550a compatible) */
++    /* serial port */
 +    if (serial_hd(0)) {
-+        serial_mm_init(address_space_mem, 0x10000C00, 2, env->irq[28],
-+                115200, serial_hd(0), DEVICE_NATIVE_ENDIAN);
++        serial_mm_init(get_system_memory(), mt7628_memmap[MT7628_DEV_UART0],
++                       2, env->irq[20], 115200, serial_hd(0),
++                       DEVICE_NATIVE_ENDIAN);
 +    }
-+    /* uart 1 (ns16550a compatible) */
 +    if (serial_hd(1)) {
-+        serial_mm_init(address_space_mem, 0x10000D00, 2, env->irq[29], 
-+                115200, serial_hd(1), DEVICE_NATIVE_ENDIAN);
++        serial_mm_init(get_system_memory(), mt7628_memmap[MT7628_DEV_UART1],
++                       2, env->irq[21], 115200, serial_hd(1),
++                       DEVICE_NATIVE_ENDIAN);
 +    }
-+    /* uart 2 (ns16550a compatible) */ 
 +    if (serial_hd(2)) {
-+        serial_mm_init(address_space_mem, 0x10000E00, 2, env->irq[30], 
-+                115200, serial_hd(2), DEVICE_NATIVE_ENDIAN);
++        serial_mm_init(get_system_memory(), mt7628_memmap[MT7628_DEV_UART2],
++                       2, env->irq[22], 115200, serial_hd(2),
++                       DEVICE_NATIVE_ENDIAN);
 +    }
 +
-+    /* TODO */
-+    /* spi */
-+    /* spi nor flash */
-+    /* usb phy */
-+    /* usb host */
++    int i;
++    /* Unimplemented devices */
++    for (i = 0; i < ARRAY_SIZE(unimplemented); i++) {
++        create_unimplemented_device(unimplemented[i].device_name,
++                                    unimplemented[i].base,
++                                    unimplemented[i].size);
++    }
 +}
 +
 +static void mips_mt7628_machine_init(MachineClass *mc)
 +{
-+    mc->desc = "Mediatek MT7628";
++    mc->desc = "Mediatek mt7628";
 +    mc->init = mips_mt7628_init;
 +    mc->default_cpu_type = MIPS_CPU_TYPE_NAME("24KEc");
 +    mc->default_ram_id = "mips_mt7628.ram";
@@ -413,6 +440,58 @@ index 0000000000..335d97ff6c
 +}
 +
 +type_init(mt7628_sysctrl_register)
+diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
+new file mode 100644
+index 0000000000..be22d38023
+--- /dev/null
++++ b/include/hw/mips/mt7628.h
+@@ -0,0 +1,46 @@
++/*
++ * MT7628 System on Chip emulation
++ *
++ * Copyright (C) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef HW_MIPS_MT7628_H
++#define HW_MIPS_MT7628_H
++
++#include "qom/object.h"
++#include "hw/mips/mips.h"
++#include "hw/mips/cpudevs.h"
++#include "hw/misc/mt7628-sysctrl.h"
++
++/**
++ * MT7628 device list
++ *
++ * This enumeration is can be used refer to a particular device in the
++ * MT7628 SoC. For example, the physical memory base address for
++ * each device can be found in the mt7628State object in the memmap member
++ * using the device enum value as index.
++ *
++ * @see mt7628State
++ */
++enum {
++    MT7628_DEV_DDR,
++    MT7628_DEV_SYSCTRL,
++    MT7628_DEV_UART0,
++    MT7628_DEV_UART1,
++    MT7628_DEV_UART2,
++};
++
++#endif /* HW_MIPS_MT7628_H */
 diff --git a/include/hw/misc/mt7628-sysctrl.h b/include/hw/misc/mt7628-sysctrl.h
 new file mode 100644
 index 0000000000..836dbdd5aa
