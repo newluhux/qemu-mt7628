@@ -29,12 +29,20 @@ I'm try add mt7628 support into qemu.
 
 #+BEGIN_SRC shell
  cd /path/to/qemu/
- ./qemu-system-mipsel -M mt7628 -m 128 \
-		-serial file:uart0 \
-		-serial file:uart1 \
-		-serial file:uart2 \
+ ./qemu-system-mipsel -M vocore2 -m 128 \
+		-serial telnet:localhost:4000,server \
+		-serial telnet:localhost:4001,server \
+		-serial telnet:localhost:4002,server \
 		-kernel /path/to/buildroot/output/build/linux-VERSION/vmlinux \
 		-s -S
+#+END_SRC
+
+you can use this command to connect serial port:
+
+#+BEGIN_SRC shell
+ telnet 127.0.0.1 4000
+ telnet 127.0.0.1 4001
+ telnet 127.0.0.1 4002
 #+END_SRC
 
 5. how to debug
@@ -62,6 +70,8 @@ same with qemu
 
 * history
 
-2022/01/06:  UART is working.
+2022/01/06:  UART output is working, input is not working, need impl irq.
 
 2022/01/09:  add unimp memory region mapping.
+
+2022/01/14:  add mt7628-intc, UART input is working. can use shell.
