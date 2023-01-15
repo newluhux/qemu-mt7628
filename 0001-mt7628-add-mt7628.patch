@@ -1,4 +1,4 @@
-From b1d37c1cf0bfb1f9d61dfee479aa89f85159e459 Mon Sep 17 00:00:00 2001
+From 814f7a0988c8d394a007ea25b7aff67cadc899b5 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Fri, 6 Jan 2023 20:04:38 +0800
 Subject: [PATCH] mt7628: add mt7628
@@ -6,17 +6,17 @@ Subject: [PATCH] mt7628: add mt7628
 ---
  configs/devices/mips-softmmu/common.mak |   2 +
  hw/intc/meson.build                     |   1 +
- hw/intc/mt7628-intc.c                   | 157 ++++++++++++++++++++
+ hw/intc/mt7628-intc.c                   | 159 +++++++++++++++++++++
  hw/mips/Kconfig                         |  11 ++
  hw/mips/meson.build                     |   2 +
  hw/mips/mt7628.c                        | 152 ++++++++++++++++++++
  hw/mips/vocore2.c                       | 181 ++++++++++++++++++++++++
  hw/misc/meson.build                     |   3 +
- hw/misc/mt7628-sysctrl.c                | 141 ++++++++++++++++++
+ hw/misc/mt7628-sysctrl.c                | 156 ++++++++++++++++++++
  include/hw/intc/mt7628-intc.h           |  30 ++++
  include/hw/mips/mt7628.h                |  78 ++++++++++
  include/hw/misc/mt7628-sysctrl.h        |  66 +++++++++
- 12 files changed, 824 insertions(+)
+ 12 files changed, 841 insertions(+)
  create mode 100644 hw/intc/mt7628-intc.c
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 hw/mips/vocore2.c
@@ -49,10 +49,10 @@ index bcbf22ff51..45f8fd7fde 100644
 +specific_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628-intc.c'))
 diff --git a/hw/intc/mt7628-intc.c b/hw/intc/mt7628-intc.c
 new file mode 100644
-index 0000000000..1d818394c9
+index 0000000000..481e0ed736
 --- /dev/null
 +++ b/hw/intc/mt7628-intc.c
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,159 @@
 +/*
 + * mt7628 interrupt controller device emulation
 + *
@@ -98,8 +98,10 @@ index 0000000000..1d818394c9
 +
 +    if (level) {
 +        set_bit(irq, (void *)&s->enable);
++        clear_bit(irq, (void *)&s->disable);
 +    } else {
 +        clear_bit(irq, (void *)&s->enable);
++        set_bit(irq, (void *)&s->disable);
 +    }
 +    mt7628_intc_update(s);
 +}
@@ -603,10 +605,10 @@ index ed0598dc9e..3717ed9f04 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628-sysctrl.c'))
 diff --git a/hw/misc/mt7628-sysctrl.c b/hw/misc/mt7628-sysctrl.c
 new file mode 100644
-index 0000000000..335d97ff6c
+index 0000000000..06933035e5
 --- /dev/null
 +++ b/hw/misc/mt7628-sysctrl.c
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,156 @@
 +/*
 + * Mediatek mt7628 System Control emulation
 + *
@@ -633,6 +635,7 @@ index 0000000000..335d97ff6c
 +#include "qemu/log.h"
 +#include "qemu/module.h"
 +#include "hw/misc/mt7628-sysctrl.h"
++#include "sysemu/runstate.h"
 +
 +#define REG_INDEX(offset)   (offset / sizeof(uint32_t))
 +
@@ -645,7 +648,10 @@ index 0000000000..335d97ff6c
 +    REG_CHIP_REV       = 0x0C,
 +    REG_SYSTEM_CONFIG0 = 0x10,
 +    REG_SYSTEM_CONFIG1 = 0x14,
++    REG_RESET_CTRL     = 0x34,
 +};
++
++#define RSTCTRL_RESET_SYSTEM BIT(0)
 +
 +static uint64_t mt7628_sysctrl_read(void *opaque, hwaddr offset,
 +                                          unsigned size)
@@ -662,6 +668,13 @@ index 0000000000..335d97ff6c
 +    return s->regs[idx];
 +}
 +
++static void mt7628_reset(void *opaque) {
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(opaque);
++    const uint32_t idx = REG_INDEX(REG_RESET_CTRL);
++    if (s->regs[idx] == RSTCTRL_RESET_SYSTEM)
++        qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
++}
++
 +static void mt7628_sysctrl_write(void *opaque, hwaddr offset,
 +                                       uint64_t val, unsigned size)
 +{
@@ -675,6 +688,10 @@ index 0000000000..335d97ff6c
 +    }
 +
 +    switch (offset) {
++    case REG_RESET_CTRL:
++        s->regs[idx] = (uint32_t) val;
++        mt7628_reset(s);
++        break;
 +    default:
 +        s->regs[idx] = (uint32_t) val;
 +        break;

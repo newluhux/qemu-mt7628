@@ -75,3 +75,5 @@ same with qemu
 2022/01/09:  add unimp memory region mapping.
 
 2022/01/14:  add mt7628-intc, UART input is working. can use shell.
+
+2022/01/15:  upload missing code, fix intc, add mt7628 reset control
