@@ -1,7 +1,9 @@
-From 3d363f3b205db76f14cb9ce67e3470e48d14c873 Mon Sep 17 00:00:00 2001
+From 84285bb784d3bcbe401b6a73da4ec171b5089074 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Fri, 6 Jan 2023 20:04:38 +0800
-Subject: [PATCH] mt7628: add mt7628
+Subject: [PATCH] hw/mips/mt7628.c: add mt7628 soc hw/mips/vocore2.c: add
+ vocore2 board hw/misc/mt7628-sysctrl.c: add mt7628 system control
+ hw/intc/mt7628-intc.c: add mt7628 interrupt control
 
 ---
  configs/devices/mips-softmmu/common.mak |   2 +
@@ -26,18 +28,15 @@ Subject: [PATCH] mt7628: add mt7628
  create mode 100644 include/hw/misc/mt7628-sysctrl.h
 
 diff --git a/configs/devices/mips-softmmu/common.mak b/configs/devices/mips-softmmu/common.mak
-index 416161f833..1ed76f9bbc 100644
+index 88aff94625..9e968fc5db 100644
 --- a/configs/devices/mips-softmmu/common.mak
 +++ b/configs/devices/mips-softmmu/common.mak
-@@ -32,6 +32,8 @@ CONFIG_MIPS_ITU=y
- CONFIG_MALTA=y
- CONFIG_PCNET_PCI=y
+@@ -32,3 +32,5 @@ CONFIG_PCNET_PCI=y
  CONFIG_MIPSSIM=y
-+CONFIG_MT7628=y
-+CONFIG_VOCORE2=y
- CONFIG_ACPI_SMBUS=y
  CONFIG_SMBUS_EEPROM=y
  CONFIG_TEST_DEVICES=y
++CONFIG_MT7628=y
++CONFIG_VOCORE2=y
 diff --git a/hw/intc/meson.build b/hw/intc/meson.build
 index bcbf22ff51..45f8fd7fde 100644
 --- a/hw/intc/meson.build
@@ -249,7 +248,7 @@ index dd0101ad4d..15e91c99a0 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..7c0ccb6eb6
+index 0000000000..b95eda3e6b
 --- /dev/null
 +++ b/hw/mips/mt7628.c
 @@ -0,0 +1,152 @@
@@ -320,12 +319,12 @@ index 0000000000..7c0ccb6eb6
 +    { "dma",             0x10002800, 2 * KiB },
 +    { "aes",             0x10004000, 4 * KiB },
 +    { "pwm",             0x10005000, 4 * KiB },
-+    { "frame-engine",    0x10100000, 64 * KiB }, 
-+    { "ethernet-switch", 0x10110000, 32 * KiB }, 
-+    { "usb-phy",         0x10120000, 32 * KiB }, 
-+    { "sdxc",            0x10130000, 32 * KiB }, 
-+    { "pcie",            0x10140000, 256 * KiB }, 
-+    { "wlan",            0x10300000, 1 * MiB }, 
++    { "frame-engine",    0x10100000, 64 * KiB },
++    { "ethernet-switch", 0x10110000, 32 * KiB },
++    { "usb-phy",         0x10120000, 32 * KiB },
++    { "sdxc",            0x10130000, 32 * KiB },
++    { "pcie",            0x10140000, 256 * KiB },
++    { "wlan",            0x10300000, 1 * MiB },
 +    { "spi-flash-direct",0x1C000000, 4 * MiB },
 +    { "pcie-direct",     0x20000000, 256 * MiB },
 +};
@@ -593,10 +592,10 @@ index 0000000000..a0536677f0
 +
 +DEFINE_MACHINE("vocore2", vocore2_machine_init)
 diff --git a/hw/misc/meson.build b/hw/misc/meson.build
-index ed0598dc9e..3717ed9f04 100644
+index 448e14b531..0dfe7d9740 100644
 --- a/hw/misc/meson.build
 +++ b/hw/misc/meson.build
-@@ -137,3 +137,6 @@ softmmu_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+@@ -140,3 +140,6 @@ softmmu_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
  
  # HPPA devices
  softmmu_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
