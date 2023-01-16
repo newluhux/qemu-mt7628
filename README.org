@@ -33,6 +33,7 @@ I'm try add mt7628 support into qemu.
 		-serial telnet:localhost:4000,server \
 		-serial telnet:localhost:4001,server \
 		-serial telnet:localhost:4002,server \
+		-drive if=pflash,index=0,file=flash_4M.img,format=raw \
 		-kernel /path/to/buildroot/output/build/linux-VERSION/vmlinux \
 		-s -S
 #+END_SRC
@@ -78,3 +79,6 @@ same with qemu
 
 2022/01/15:  upload missing code, fix intc, add mt7628 reset control,
              usb host is working.
+
+2022/01/16:  add flash direct access support. try add boot from flash support,
+             but uboot is not working, need fix qemu to run unmodify uboot.
