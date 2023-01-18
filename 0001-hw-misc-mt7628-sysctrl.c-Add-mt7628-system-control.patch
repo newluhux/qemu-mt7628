@@ -1,0 +1,293 @@
+From 05f690cc3172dd2596a751b75522499873e874e9 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Wed, 18 Jan 2023 16:29:15 +0800
+Subject: [PATCH 1/3] hw/misc/mt7628-sysctrl.c: Add mt7628 system control
+ support.
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ MAINTAINERS                      |   5 +
+ hw/misc/meson.build              |   3 +
+ hw/misc/mt7628-sysctrl.c         | 169 +++++++++++++++++++++++++++++++
+ include/hw/misc/mt7628-sysctrl.h |  66 ++++++++++++
+ 4 files changed, 243 insertions(+)
+ create mode 100644 hw/misc/mt7628-sysctrl.c
+ create mode 100644 include/hw/misc/mt7628-sysctrl.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 6982be48c6..534dc197e9 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -1234,6 +1234,11 @@ F: configs/devices/mips*/*
+ F: hw/mips/
+ F: include/hw/mips/
+ 
++VoCore2
++M: Lu Hui <luhux76@gmail.com>
++S: Maintained
++F: hw/*/*mt7628*
++
+ Jazz
+ M: Hervé Poussineau <hpoussin@reactos.org>
+ R: Aleksandar Rikalo <aleksandar.rikalo@syrmia.com>
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index 448e14b531..0dfe7d9740 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -140,3 +140,6 @@ softmmu_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+ 
+ # HPPA devices
+ softmmu_ss.add(when: 'CONFIG_LASI', if_true: files('lasi.c'))
++
++# mt7628
++softmmu_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628-sysctrl.c'))
+diff --git a/hw/misc/mt7628-sysctrl.c b/hw/misc/mt7628-sysctrl.c
+new file mode 100644
+index 0000000000..e04d1de69d
+--- /dev/null
++++ b/hw/misc/mt7628-sysctrl.c
+@@ -0,0 +1,169 @@
++/*
++ * Mediatek mt7628 System Control emulation
++ *
++ * Copyright (C) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "qemu/osdep.h"
++#include "qemu/units.h"
++#include "hw/sysbus.h"
++#include "migration/vmstate.h"
++#include "qemu/log.h"
++#include "qemu/module.h"
++#include "hw/misc/mt7628-sysctrl.h"
++#include "sysemu/runstate.h"
++
++#define REG_INDEX(offset)   (offset / sizeof(uint32_t))
++
++/* System Control register offsets */
++/* from linux kernel arch/mips/include/asm/mach-ralink/mt7620.h */
++enum {
++    REG_CHIP_NAME0 = 0x00,
++    REG_CHIP_NAME1 = 0x04,
++    REG_EFUSE_CFG = 0x08,
++    REG_CHIP_REV = 0x0C,
++    REG_SYS_CFG0 = 0x10,
++    REG_SYS_CFG1 = 0x14,
++    REG_CLK_CFG0 = 0x2C,
++    REG_CLK_CFG1 = 0x30,
++    REG_RST_CTRL = 0x34,
++    REG_RST_STAT = 0x38,
++    REG_AGPIO_CFG = 0x3C,
++    REG_GPIO1_MODE = 0x60,
++    REG_GPIO2_MODE = 0x64,
++};
++
++static uint64_t mt7628_sysctrl_read(void *opaque, hwaddr offset,
++                                    unsigned size)
++{
++    const mt7628SysCtrlState *s = MT7628_SYSCTRL(opaque);
++    const uint32_t idx = REG_INDEX(offset);
++
++    if (idx >= MT7628_SYSCTRL_REGS_NUM) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: out-of-bounds offset 0x%04x\n",
++                      __func__, (uint32_t) offset);
++        return 0;
++    }
++
++    return s->regs[idx];
++}
++
++enum {
++    RST_SYSTEM = 0,
++};
++
++static void mt7628_reset(uint32_t val)
++{
++    if (test_bit(RST_SYSTEM, (void *)&val)) {
++        /* reset whole system */
++        qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
++    }
++}
++
++static void mt7628_sysctrl_write(void *opaque, hwaddr offset,
++                                 uint64_t val, unsigned size)
++{
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(opaque);
++    const uint32_t idx = REG_INDEX(offset);
++
++    if (idx >= MT7628_SYSCTRL_REGS_NUM) {
++        qemu_log_mask(LOG_GUEST_ERROR, "%s: out-of-bounds offset 0x%04x\n",
++                      __func__, (uint32_t) offset);
++        return;
++    }
++
++    switch (offset) {
++    case REG_RST_CTRL:
++        s->regs[idx] = (uint32_t) val;
++        mt7628_reset(s->regs[idx]);
++        break;
++    default:
++        s->regs[idx] = (uint32_t) val;
++        break;
++    }
++}
++
++static const MemoryRegionOps mt7628_sysctrl_ops = {
++    .read = mt7628_sysctrl_read,
++    .write = mt7628_sysctrl_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++    .valid = {
++        .min_access_size = 4,
++        .max_access_size = 4,
++    },
++    .impl.min_access_size = 4,
++};
++
++static void mt7628_sysctrl_reset(DeviceState *dev)
++{
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(dev);
++
++    /* Set default values for registers */
++    /* dump from real mt7628 board */
++    s->regs[REG_INDEX(REG_CHIP_NAME0)] = 0x3637544d; /* "MT76" */
++    s->regs[REG_INDEX(REG_CHIP_NAME1)] = 0x20203832; /* "28  " */
++    s->regs[REG_INDEX(REG_EFUSE_CFG)]  = 0x01010000;
++    s->regs[REG_INDEX(REG_CHIP_REV)]   = 0x00010102;
++    s->regs[REG_INDEX(REG_SYS_CFG0)]   = 0x00144144;
++    s->regs[REG_INDEX(REG_SYS_CFG1)]   = 0x02605500;
++    s->regs[REG_INDEX(REG_CLK_CFG0)]   = 0b00000000001000000001000000000000;
++    s->regs[REG_INDEX(REG_CLK_CFG1)]   = 0b11110110100111110111111100000000;
++    s->regs[REG_INDEX(REG_RST_CTRL)]   = 0b00000100000000000000010000000000;
++    s->regs[REG_INDEX(REG_RST_STAT)]   = 0b11000000000000110000000000000000;
++    s->regs[REG_INDEX(REG_AGPIO_CFG)]  = 0b00000000000111110000000000011111;
++    s->regs[REG_INDEX(REG_GPIO1_MODE)] = 0b01010100000001010000010000000100;
++    s->regs[REG_INDEX(REG_GPIO2_MODE)] = 0b00000101010101010000010101010101;
++}
++
++static void mt7628_sysctrl_init(Object *obj)
++{
++    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
++    mt7628SysCtrlState *s = MT7628_SYSCTRL(obj);
++
++    /* Memory mapping */
++    memory_region_init_io(&s->iomem, OBJECT(s), &mt7628_sysctrl_ops, s,
++                          TYPE_MT7628_SYSCTRL, MT7628_SYSCTRL_REGS_MAXADDR);
++    sysbus_init_mmio(sbd, &s->iomem);
++}
++
++static const VMStateDescription mt7628_sysctrl_vmstate = {
++    .name = "mt7628-sysctrl",
++    .version_id = 1,
++    .minimum_version_id = 1,
++};
++
++static void mt7628_sysctrl_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->reset = mt7628_sysctrl_reset;
++    dc->vmsd = &mt7628_sysctrl_vmstate;
++}
++
++static const TypeInfo mt7628_sysctrl_info = {
++    .name = TYPE_MT7628_SYSCTRL,
++    .parent = TYPE_SYS_BUS_DEVICE,
++    .instance_init = mt7628_sysctrl_init,
++    .instance_size = sizeof(mt7628SysCtrlState),
++    .class_init = mt7628_sysctrl_class_init,
++};
++
++static void mt7628_sysctrl_register(void)
++{
++    type_register_static(&mt7628_sysctrl_info);
++}
++
++type_init(mt7628_sysctrl_register)
+diff --git a/include/hw/misc/mt7628-sysctrl.h b/include/hw/misc/mt7628-sysctrl.h
+new file mode 100644
+index 0000000000..836dbdd5aa
+--- /dev/null
++++ b/include/hw/misc/mt7628-sysctrl.h
+@@ -0,0 +1,66 @@
++/*
++ * Mediatek mt7628 System Control emulation
++ *
++ * Copyright (C) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef HW_MISC_MT7628_SYSCTRL_H
++#define HW_MISC_MT7628_SYSCTRL_H
++
++#include "qom/object.h"
++#include "hw/sysbus.h"
++
++/**
++ * @name Constants
++ * @{
++ */
++
++/** Highest register address used by System Control device */
++#define MT7628_SYSCTRL_REGS_MAXADDR   (0x100)
++
++/** Total number of known registers */
++#define MT7628_SYSCTRL_REGS_NUM       ((MT7628_SYSCTRL_REGS_MAXADDR / \
++                                      sizeof(uint32_t)) + 1)
++
++/** @} */
++
++/**
++ * @name Object model
++ * @{
++ */
++
++#define TYPE_MT7628_SYSCTRL    "mt7628-sysctrl"
++OBJECT_DECLARE_SIMPLE_TYPE(mt7628SysCtrlState, MT7628_SYSCTRL)
++
++/** @} */
++
++/**
++ * mt7628 System Control object instance state
++ */
++struct mt7628SysCtrlState {
++    /*< private >*/
++    SysBusDevice parent_obj;
++    /*< public >*/
++
++    /** Maps I/O registers in physical memory */
++    MemoryRegion iomem;
++
++    /** Array of hardware registers */
++    uint32_t regs[MT7628_SYSCTRL_REGS_NUM];
++
++};
++
++#endif /* HW_MISC_MT7628_SYSCTRL_H */
+-- 
+2.38.1
+

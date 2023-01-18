@@ -82,3 +82,5 @@ same with qemu
 
 2022/01/16:  add flash direct access support. try add boot from flash support,
              but uboot is not working, need fix qemu to run unmodify uboot.
+
+2022/01/18:  try send patch to qemu upstream.
