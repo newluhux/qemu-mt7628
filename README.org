@@ -22,7 +22,11 @@ I'm try add mt7628 support into qemu.
 
 * how to run it
 
-1. use buildroot build firmware: https://github.com/newluhux/vocore2/tree/master/buildroot-2022.02.6
+1. use buildroot build firmware: https://github.com/newluhux/vocore2/tree/master/buildroot
+
+why use vocore2's buildroot?:
+
+I found 'mt7628_evb' in uboot source code, but I can't found this board on taobao or ebay.
 
 2. get qemu source tree and apply patch
 
