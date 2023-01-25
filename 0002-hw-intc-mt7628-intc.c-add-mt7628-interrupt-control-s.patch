@@ -1,7 +1,7 @@
-From bd6e355f5a545e6853e3a19477d6a571bf8d3412 Mon Sep 17 00:00:00 2001
+From f69ec1c8ebe48d2380e760dacdeaec3408679db5 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 18 Jan 2023 17:00:29 +0800
-Subject: [PATCH 2/3] hw/intc/mt7628-intc.c: add mt7628 interrupt control
+Subject: [PATCH 2/5] hw/intc/mt7628-intc.c: add mt7628 interrupt control
  support.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
@@ -14,10 +14,10 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  create mode 100644 include/hw/intc/mt7628-intc.h
 
 diff --git a/hw/intc/meson.build b/hw/intc/meson.build
-index bcbf22ff51..45f8fd7fde 100644
+index 8be459b41c..511b42fbd1 100644
 --- a/hw/intc/meson.build
 +++ b/hw/intc/meson.build
-@@ -67,3 +67,4 @@ specific_ss.add(when: 'CONFIG_LOONGARCH_IPI', if_true: files('loongarch_ipi.c'))
+@@ -73,3 +73,4 @@ specific_ss.add(when: 'CONFIG_LOONGARCH_IPI', if_true: files('loongarch_ipi.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_PCH_PIC', if_true: files('loongarch_pch_pic.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_PCH_MSI', if_true: files('loongarch_pch_msi.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_EXTIOI', if_true: files('loongarch_extioi.c'))
@@ -220,5 +220,5 @@ index 0000000000..a2f4690d1d
 +
 +#endif
 -- 
-2.38.1
+2.39.1
 

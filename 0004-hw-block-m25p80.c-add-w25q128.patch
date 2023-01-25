@@ -1,0 +1,25 @@
+From 36c226694332a7ab96b8583e5d6b93c56fe9b305 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Wed, 25 Jan 2023 18:32:11 +0800
+Subject: [PATCH 4/5] hw/block/m25p80.c: add w25q128.
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ hw/block/m25p80.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/block/m25p80.c b/hw/block/m25p80.c
+index 02adc87527..5e228b0d0a 100644
+--- a/hw/block/m25p80.c
++++ b/hw/block/m25p80.c
+@@ -345,6 +345,7 @@ static const FlashPartInfo known_devices[] = {
+     { INFO("w25q64",      0xef4017,      0,  64 << 10, 128, ER_4K) },
+     { INFO("w25q80",      0xef5014,      0,  64 << 10,  16, ER_4K) },
+     { INFO("w25q80bl",    0xef4014,      0,  64 << 10,  16, ER_4K) },
++    { INFO("w25q128",     0xef4018,      0,  64 << 10, 256, ER_4K) },
+     { INFO("w25q256",     0xef4019,      0,  64 << 10, 512, ER_4K),
+       .sfdp_read = m25p80_sfdp_w25q256 },
+     { INFO("w25q512jv",   0xef4020,      0,  64 << 10, 1024, ER_4K),
+-- 
+2.39.1
+

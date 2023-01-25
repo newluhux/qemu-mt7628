@@ -1,7 +1,7 @@
-From 934ba6caadae46b7dd87da42ed26b049751a2426 Mon Sep 17 00:00:00 2001
+From 4343404b7d8e9588d3ac3de39fb7fbbf37daed0d Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 18 Jan 2023 17:06:02 +0800
-Subject: [PATCH 3/3] hw/mips/mt7628.c: add mt7628 soc support, add a mt7628
+Subject: [PATCH 3/5] hw/mips/mt7628.c: add mt7628 soc support, add a mt7628
  board VoCore2.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
@@ -19,10 +19,10 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  create mode 100644 include/hw/mips/mt7628.h
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index 534dc197e9..cc32c6d2f3 100644
+index 2c1c20e846..a14c6a01cd 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -1238,6 +1238,7 @@ VoCore2
+@@ -1236,6 +1236,7 @@ VoCore2
  M: Lu Hui <luhux76@gmail.com>
  S: Maintained
  F: hw/*/*mt7628*
@@ -31,20 +31,20 @@ index 534dc197e9..cc32c6d2f3 100644
  Jazz
  M: Hervé Poussineau <hpoussin@reactos.org>
 diff --git a/configs/devices/mips-softmmu/common.mak b/configs/devices/mips-softmmu/common.mak
-index 88aff94625..9e968fc5db 100644
+index 7da99327a7..e4a5c54635 100644
 --- a/configs/devices/mips-softmmu/common.mak
 +++ b/configs/devices/mips-softmmu/common.mak
-@@ -32,3 +32,5 @@ CONFIG_PCNET_PCI=y
+@@ -29,3 +29,5 @@ CONFIG_PCNET_PCI=y
  CONFIG_MIPSSIM=y
  CONFIG_SMBUS_EEPROM=y
  CONFIG_TEST_DEVICES=y
 +CONFIG_MT7628=y
 +CONFIG_VOCORE2=y
 diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
-index 725525358d..dfd7848137 100644
+index da3a37e215..f7faec010c 100644
 --- a/hw/mips/Kconfig
 +++ b/hw/mips/Kconfig
-@@ -8,6 +8,17 @@ config MIPSSIM
+@@ -10,6 +10,17 @@ config MIPSSIM
      select SERIAL_ISA
      select MIPSNET
  
@@ -63,7 +63,7 @@ index 725525358d..dfd7848137 100644
      bool
      select ISA_BUS
 diff --git a/hw/mips/meson.build b/hw/mips/meson.build
-index dd0101ad4d..15e91c99a0 100644
+index 900613fc08..9ad125a996 100644
 --- a/hw/mips/meson.build
 +++ b/hw/mips/meson.build
 @@ -10,6 +10,8 @@ mips_ss.add(when: 'CONFIG_JAZZ', if_true: files('jazz.c'))
@@ -540,5 +540,5 @@ index 0000000000..2570f87846
 +
 +#endif /* HW_MIPS_MT7628_H */
 -- 
-2.38.1
+2.39.1
 

@@ -4,7 +4,7 @@ I'm try add mt7628 support into qemu.
 
 * support
 
-| hardware     | status |
+| hardware     | status |  
 |--------------+--------|
 | DDR 256MiB   | OK     |
 | SYSCTL       | OK     |
@@ -12,6 +12,7 @@ I'm try add mt7628 support into qemu.
 | TIMER        | TODO   |
 | MEMC         | TODO   |
 | UART         | OK     |
+| SPI          | OK     |
 | EHCI         | OK     |
 | FLASH-DIRECT | OK     |
 | ETHERNET     | TODO   |
@@ -52,9 +53,19 @@ I found 'mt7628_evb' in uboot source code, but I can't found this board on taoba
 #+BEGIN_SRC shell
  cd /path/to/qemu/
  ./qemu-system-mipsel -M vocore2 -m 128 \
-		-drive if=pflash,index=0,file=/path/to/buildroot/output/images/flash.bin,format=raw \
+		-serial telnet:127.0.0.1:4000,server \
+		-serial telnet:127.0.0.1:4001,server \
+		-serial telnet:127.0.0.1:4002,server \
+		-drive if=pflash,index=0,file=/path/to/buildroot/output/images/flash_4M.bin,format=raw \
+		-drive if=mtd,index=0,file=/path/to/buildroot/output/images/flash_16M.bin,format=raw \
 		-kernel /path/to/buildroot/output/build/linux-VERSION/vmlinux \
 		-s -S
+#+END_SRC
+
+connect to serial port:
+
+#+BEGIN_SRC shell
+telnet 127.0.0.1 4000 # UART0
 #+END_SRC
 
 5. how to debug
@@ -97,3 +108,8 @@ same with qemu
 2022/01/18:  try send patch to qemu upstream.
 
 2022/01/21:  uboot is wip, I need emulate a mt7628 DDR controler.
+
+2022/01/23:  write a ddr controler is boring, try impl spi master.
+
+2022/01/25:  spi master is ok, default attach a w25q128 flash,
+             next is ethernet or pcie.

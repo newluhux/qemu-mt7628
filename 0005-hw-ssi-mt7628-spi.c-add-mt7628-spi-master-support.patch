@@ -1,0 +1,363 @@
+From d52d8e7a499fa70598e2a03415c5df06ae9c6e88 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Wed, 25 Jan 2023 19:22:31 +0800
+Subject: [PATCH 5/5] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ hw/mips/Kconfig             |   2 +
+ hw/mips/mt7628.c            |  22 ++++-
+ hw/ssi/Kconfig              |   4 +
+ hw/ssi/meson.build          |   1 +
+ hw/ssi/mt7628-spi.c         | 163 ++++++++++++++++++++++++++++++++++++
+ include/hw/mips/mt7628.h    |   3 +
+ include/hw/ssi/mt7628-spi.h |  30 +++++++
+ 7 files changed, 223 insertions(+), 2 deletions(-)
+ create mode 100644 hw/ssi/mt7628-spi.c
+ create mode 100644 include/hw/ssi/mt7628-spi.h
+
+diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
+index f7faec010c..d2838bde0c 100644
+--- a/hw/mips/Kconfig
++++ b/hw/mips/Kconfig
+@@ -13,6 +13,8 @@ config MIPSSIM
+ config MT7628
+     bool
+     select SERIAL
++    select MT7628_SPI
++    select SSI_M25P80
+     select USB_EHCI
+     select USB_EHCI_SYSBUS
+     select UNIMP
+diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
+index d982b1c704..7230f27336 100644
+--- a/hw/mips/mt7628.c
++++ b/hw/mips/mt7628.c
+@@ -26,6 +26,7 @@
+ #include "hw/char/serial.h"
+ #include "hw/misc/unimp.h"
+ #include "hw/mips/mt7628.h"
++#include "hw/ssi/mt7628-spi.h"
+ #include "sysemu/sysemu.h"
+ #include "hw/boards.h"
+ #include "hw/loader.h"
+@@ -55,6 +56,7 @@ const hwaddr mt7628_memmap[] = {
+     [MT7628_DEV_UART1]        = 0x10000D00,
+     [MT7628_DEV_UART2]        = 0x10000E00,
+     [MT7628_DEV_EHCI]         = 0x101C0000,
++    [MT7628_DEV_SPI]          = 0x10000B00,
+     [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
+ };
+ 
+@@ -71,7 +73,6 @@ struct mt7628Unimplemented {
+     { "spi-slave",    0x10000700, 0xFF },
+     { "i2c",          0x10000900, 0xFF },
+     { "i2s",          0x10000A00, 0xFF },
+-    { "spi-master",   0x10000B00, 0xFF },
+     { "rgctl",        0x10001000, 2 * KiB },
+     { "pcm",          0x10002000, 2 * KiB },
+     { "dma",          0x10002800, 2 * KiB },
+@@ -93,6 +94,7 @@ static void mt7628_init(Object *obj)
+ 
+     object_initialize_child(obj, "sysctrl", &s->sysctrl, TYPE_MT7628_SYSCTRL);
+     object_initialize_child(obj, "intc", &s->intc, TYPE_MT7628_INTC);
++    object_initialize_child(obj, "spi", &s->spi, TYPE_MT7628_SPI);
+     if (machine_usb(current_machine)) {
+         object_initialize_child(obj, "ehci", &s->ehci, TYPE_PLATFORM_EHCI);
+     }
+@@ -102,6 +104,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+ {
+     mt7628State *s = MT7628(dev);
+     SysBusDevice *sysbusdev;
++    DriveInfo *dinfo;
+     int i;
+ 
+     if (!sysbus_realize(SYS_BUS_DEVICE(&s->intc), errp)) {
+@@ -120,6 +123,21 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+     sysbus_mmio_map(SYS_BUS_DEVICE(&s->sysctrl), 0,
+                     s->memmap[MT7628_DEV_SYSCTRL]);
+ 
++    /* spi master */
++    sysbus_realize(SYS_BUS_DEVICE(&s->spi), &error_fatal);
++    sysbus_mmio_map(SYS_BUS_DEVICE(&s->spi), 0,
++                    s->memmap[MT7628_DEV_SPI]);
++
++    /* 16MiB spi nor flash */
++    DeviceState *flash_dev;
++    dinfo = drive_get(IF_MTD, 0, 0);
++    flash_dev = qdev_new("w25q128");
++    if (dinfo) {
++        qdev_prop_set_drive(flash_dev, "drive", blk_by_legacy_dinfo(dinfo));
++    }
++    mt7628SpiState *spi = &s->spi;
++    qdev_realize_and_unref(flash_dev, BUS(spi->spi), &error_fatal);
++
+     /* serial port */
+     for (i = 0; i < 3; i++) {
+         if (serial_hd(i)) {
+@@ -146,7 +164,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+     }
+ 
+     /* flash direct access */
+-    DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 0);
++    dinfo = drive_get(IF_PFLASH, 0, 0);
+     if (dinfo) {
+         pflash_cfi01_register(s->memmap[MT7628_DEV_FLASH_DIRECT],
+                               "mt7628.flash0", 4 * MiB,
+diff --git a/hw/ssi/Kconfig b/hw/ssi/Kconfig
+index 7d90a02181..694e01ede1 100644
+--- a/hw/ssi/Kconfig
++++ b/hw/ssi/Kconfig
+@@ -20,3 +20,7 @@ config XILINX_SPIPS
+ config STM32F2XX_SPI
+     bool
+     select SSI
++
++config MT7628_SPI
++    bool
++    select SSI
+diff --git a/hw/ssi/meson.build b/hw/ssi/meson.build
+index 702aa5e4df..82c7972a91 100644
+--- a/hw/ssi/meson.build
++++ b/hw/ssi/meson.build
+@@ -11,3 +11,4 @@ softmmu_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files('xlnx-versal-ospi.c'))
+ softmmu_ss.add(when: 'CONFIG_IMX', if_true: files('imx_spi.c'))
+ softmmu_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_spi.c'))
+ softmmu_ss.add(when: 'CONFIG_IBEX', if_true: files('ibex_spi_host.c'))
++softmmu_ss.add(when: 'CONFIG_MT7628_SPI', if_true: files('mt7628-spi.c'))
+diff --git a/hw/ssi/mt7628-spi.c b/hw/ssi/mt7628-spi.c
+new file mode 100644
+index 0000000000..3a9808dad2
+--- /dev/null
++++ b/hw/ssi/mt7628-spi.c
+@@ -0,0 +1,163 @@
++/*
++ * mt7628 spi master control
++ *
++ * Copyright (c) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2 or later, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along with
++ * this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "qemu/osdep.h"
++#include "hw/irq.h"
++#include "hw/qdev-properties.h"
++#include "hw/sysbus.h"
++#include "hw/ssi/ssi.h"
++#include "qemu/log.h"
++#include "qemu/module.h"
++#include "hw/ssi/mt7628-spi.h"
++
++/*
++ * TODO:
++ * chip select
++ * byte order select
++ */
++
++enum {
++    REG_SPI_TRANS    = 0x00,
++    REG_SPI_OPADDR   = 0x04,
++    REG_SPI_DIDO0    = 0x08,
++    REG_SPI_DIDO7    = 0x24,
++    REG_SPI_MOREBUF  = 0x2C,
++};
++
++#define REG_SPI_TRANS_START_SHIFT 8
++#define REG_SPI_MOREBUF_TX_SHIFT 0
++#define REG_SPI_MOREBUF_RX_SHIFT 12
++#define REG_SPI_MOREBUF_CMD_SHIFT 24
++#define REG_SPI_OPADDR_OPCODE_SHIFT 0
++
++#define REG_INDEX(offset)   (offset / sizeof(uint32_t))
++
++static void mt7628_spi_transfer(mt7628SpiState *s)
++{
++    uint32_t *regs = s->regs;
++
++    uint32_t reg_spi_morebuf = regs[REG_INDEX(REG_SPI_MOREBUF)];
++    uint8_t  tx_bits = reg_spi_morebuf >> REG_SPI_MOREBUF_TX_SHIFT;
++    uint8_t  rx_bits = reg_spi_morebuf >> REG_SPI_MOREBUF_RX_SHIFT;
++    /* write to slave : opcode + D0 D7 */
++    int      tx_bytes = (tx_bits / 8) + 1;
++    int      rx_bytes = (rx_bits / 8) + 1;
++    uint8_t sendbuf[33];
++    uint8_t recvbuf[32];
++
++    int recv_i, send_i;
++    int len;
++
++    if (test_bit(REG_SPI_TRANS_START_SHIFT,
++                 (void *)(regs + REG_INDEX(REG_SPI_TRANS))) == 0) {
++        return; /* not need trans */
++    }
++
++    sendbuf[0] = regs[REG_INDEX(REG_SPI_OPADDR)] >> REG_SPI_OPADDR_OPCODE_SHIFT;
++    memcpy(sendbuf + 1, &regs[REG_INDEX(REG_SPI_DIDO0)], 32);
++
++    /* init recvbuf */
++    memset(recvbuf, 0x00, 32);
++
++    /* skip opcode */
++    recv_i = -1;
++    send_i = 0;
++
++    len = MAX(rx_bytes, tx_bytes);
++    while ((send_i < len) && (recv_i < 32)) {
++        if (recv_i < 0) {
++            ssi_transfer(s->spi, sendbuf[send_i]);
++        } else {
++            recvbuf[recv_i] = ssi_transfer(s->spi, sendbuf[send_i]);
++        }
++        recv_i++;
++        send_i++;
++    }
++    memcpy(regs + REG_INDEX(REG_SPI_DIDO0), recvbuf, 32);
++
++    /* action is over, reset register */
++    clear_bit(REG_SPI_TRANS_START_SHIFT,
++              (void *)(regs + REG_INDEX(REG_SPI_TRANS)));
++}
++
++static void mt7628_spi_reset(DeviceState *d)
++{
++    mt7628SpiState *s = MT7628_SPI(d);
++    memset(s->regs, 0, sizeof(s->regs));
++}
++
++static uint64_t mt7628_spi_read(void *opaque, hwaddr addr, unsigned int size)
++{
++    mt7628SpiState *s = opaque;
++    uint32_t idx = REG_INDEX(addr);
++    return s->regs[idx];
++}
++
++static void mt7628_spi_write(void *opaque, hwaddr addr,
++                             uint64_t val64, unsigned int size)
++{
++    mt7628SpiState *s = opaque;
++    uint32_t value = val64;
++    uint32_t idx = REG_INDEX(addr);
++    s->regs[idx] = value;
++    mt7628_spi_transfer(s);
++}
++
++static const MemoryRegionOps mt7628_spi_ops = {
++    .read = mt7628_spi_read,
++    .write = mt7628_spi_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .valid = {
++        .min_access_size = 4,
++        .max_access_size = 4
++    }
++};
++
++static void mt7628_spi_realize(DeviceState *dev, Error **errp)
++{
++    SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
++    mt7628SpiState *s = MT7628_SPI(dev);
++
++    s->spi = ssi_create_bus(dev, "spi");
++
++    memory_region_init_io(&s->mmio, OBJECT(s), &mt7628_spi_ops, s,
++                          TYPE_MT7628_SPI, 0xFF);
++    sysbus_init_mmio(sbd, &s->mmio);
++}
++
++static void mt7628_spi_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->reset = mt7628_spi_reset;
++    dc->realize = mt7628_spi_realize;
++}
++
++static const TypeInfo mt7628_spi_info = {
++    .name           = TYPE_MT7628_SPI,
++    .parent         = TYPE_SYS_BUS_DEVICE,
++    .instance_size  = sizeof(mt7628SpiState),
++    .class_init     = mt7628_spi_class_init,
++};
++
++static void mt7628_spi_register_types(void)
++{
++    type_register_static(&mt7628_spi_info);
++}
++
++type_init(mt7628_spi_register_types)
+diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
+index 2570f87846..367b393215 100644
+--- a/include/hw/mips/mt7628.h
++++ b/include/hw/mips/mt7628.h
+@@ -27,6 +27,7 @@
+ #include "hw/usb/hcd-ehci.h"
+ #include "hw/misc/mt7628-sysctrl.h"
+ #include "hw/intc/mt7628-intc.h"
++#include "hw/ssi/mt7628-spi.h"
+ 
+ /**
+  * MT7628 device list
+@@ -45,6 +46,7 @@ enum {
+     MT7628_DEV_UART0,
+     MT7628_DEV_UART1,
+     MT7628_DEV_UART2,
++    MT7628_DEV_SPI,
+     MT7628_DEV_EHCI,
+     MT7628_DEV_FLASH_DIRECT,
+ };
+@@ -70,6 +72,7 @@ struct mt7628State {
+     const hwaddr *memmap;
+     mt7628SysCtrlState sysctrl;
+     mt7628intcState intc;
++    mt7628SpiState spi;
+     EHCISysBusState ehci;
+     MemoryRegion flash_direct;
+ };
+diff --git a/include/hw/ssi/mt7628-spi.h b/include/hw/ssi/mt7628-spi.h
+new file mode 100644
+index 0000000000..68978ce56c
+--- /dev/null
++++ b/include/hw/ssi/mt7628-spi.h
+@@ -0,0 +1,30 @@
++/*
++ * mt7628 spi master
++ *
++ * Copyright (c) 2023 Lu Hui <luhux76@gmail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 or
++ * (at your option) any later version.
++ */
++
++#ifndef HW_MT7628_SPI_H
++#define HW_MT7628_SPI_H
++
++#include "hw/sysbus.h"
++#include "qom/object.h"
++
++#define MT7628_SPI_REG_NUM  (0xFF / 4)
++
++#define TYPE_MT7628_SPI "mt7628-spi"
++OBJECT_DECLARE_SIMPLE_TYPE(mt7628SpiState, MT7628_SPI)
++
++struct mt7628SpiState {
++    SysBusDevice parent_obj;
++    MemoryRegion mmio;
++
++    SSIBus *spi;
++    uint32_t regs[MT7628_SPI_REG_NUM];
++};
++
++#endif
+-- 
+2.39.1
+
