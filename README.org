@@ -113,3 +113,5 @@ same with qemu
 
 2022/01/25:  spi master is ok, default attach a w25q128 flash,
              next is ethernet or pcie.
+
+2022/01/28:  spi master have bug, rewrite it, add chip select.

@@ -1,4 +1,4 @@
-From d52d8e7a499fa70598e2a03415c5df06ae9c6e88 Mon Sep 17 00:00:00 2001
+From 946aae83b11981163297688ff114e77424248ab2 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 25 Jan 2023 19:22:31 +0800
 Subject: [PATCH 5/5] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
@@ -6,13 +6,13 @@ Subject: [PATCH 5/5] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  hw/mips/Kconfig             |   2 +
- hw/mips/mt7628.c            |  22 ++++-
+ hw/mips/mt7628.c            |  26 +++-
  hw/ssi/Kconfig              |   4 +
  hw/ssi/meson.build          |   1 +
- hw/ssi/mt7628-spi.c         | 163 ++++++++++++++++++++++++++++++++++++
+ hw/ssi/mt7628-spi.c         | 283 ++++++++++++++++++++++++++++++++++++
  include/hw/mips/mt7628.h    |   3 +
- include/hw/ssi/mt7628-spi.h |  30 +++++++
- 7 files changed, 223 insertions(+), 2 deletions(-)
+ include/hw/ssi/mt7628-spi.h |  47 ++++++
+ 7 files changed, 364 insertions(+), 2 deletions(-)
  create mode 100644 hw/ssi/mt7628-spi.c
  create mode 100644 include/hw/ssi/mt7628-spi.h
 
@@ -30,18 +30,19 @@ index f7faec010c..d2838bde0c 100644
      select USB_EHCI_SYSBUS
      select UNIMP
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
-index d982b1c704..7230f27336 100644
+index d982b1c704..b520a14c5f 100644
 --- a/hw/mips/mt7628.c
 +++ b/hw/mips/mt7628.c
-@@ -26,6 +26,7 @@
+@@ -26,6 +26,8 @@
  #include "hw/char/serial.h"
  #include "hw/misc/unimp.h"
  #include "hw/mips/mt7628.h"
++#include "hw/ssi/ssi.h"
 +#include "hw/ssi/mt7628-spi.h"
  #include "sysemu/sysemu.h"
  #include "hw/boards.h"
  #include "hw/loader.h"
-@@ -55,6 +56,7 @@ const hwaddr mt7628_memmap[] = {
+@@ -55,6 +57,7 @@ const hwaddr mt7628_memmap[] = {
      [MT7628_DEV_UART1]        = 0x10000D00,
      [MT7628_DEV_UART2]        = 0x10000E00,
      [MT7628_DEV_EHCI]         = 0x101C0000,
@@ -49,7 +50,7 @@ index d982b1c704..7230f27336 100644
      [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
  };
  
-@@ -71,7 +73,6 @@ struct mt7628Unimplemented {
+@@ -71,7 +74,6 @@ struct mt7628Unimplemented {
      { "spi-slave",    0x10000700, 0xFF },
      { "i2c",          0x10000900, 0xFF },
      { "i2s",          0x10000A00, 0xFF },
@@ -57,7 +58,7 @@ index d982b1c704..7230f27336 100644
      { "rgctl",        0x10001000, 2 * KiB },
      { "pcm",          0x10002000, 2 * KiB },
      { "dma",          0x10002800, 2 * KiB },
-@@ -93,6 +94,7 @@ static void mt7628_init(Object *obj)
+@@ -93,6 +95,7 @@ static void mt7628_init(Object *obj)
  
      object_initialize_child(obj, "sysctrl", &s->sysctrl, TYPE_MT7628_SYSCTRL);
      object_initialize_child(obj, "intc", &s->intc, TYPE_MT7628_INTC);
@@ -65,7 +66,7 @@ index d982b1c704..7230f27336 100644
      if (machine_usb(current_machine)) {
          object_initialize_child(obj, "ehci", &s->ehci, TYPE_PLATFORM_EHCI);
      }
-@@ -102,6 +104,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+@@ -102,6 +105,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
  {
      mt7628State *s = MT7628(dev);
      SysBusDevice *sysbusdev;
@@ -73,7 +74,7 @@ index d982b1c704..7230f27336 100644
      int i;
  
      if (!sysbus_realize(SYS_BUS_DEVICE(&s->intc), errp)) {
-@@ -120,6 +123,21 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+@@ -120,6 +124,24 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
      sysbus_mmio_map(SYS_BUS_DEVICE(&s->sysctrl), 0,
                      s->memmap[MT7628_DEV_SYSCTRL]);
  
@@ -82,8 +83,9 @@ index d982b1c704..7230f27336 100644
 +    sysbus_mmio_map(SYS_BUS_DEVICE(&s->spi), 0,
 +                    s->memmap[MT7628_DEV_SPI]);
 +
-+    /* 16MiB spi nor flash */
++    /* spi nor flash */
 +    DeviceState *flash_dev;
++    qemu_irq cs_line;
 +    dinfo = drive_get(IF_MTD, 0, 0);
 +    flash_dev = qdev_new("w25q128");
 +    if (dinfo) {
@@ -91,11 +93,13 @@ index d982b1c704..7230f27336 100644
 +    }
 +    mt7628SpiState *spi = &s->spi;
 +    qdev_realize_and_unref(flash_dev, BUS(spi->spi), &error_fatal);
++    cs_line = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
++    sysbus_connect_irq(SYS_BUS_DEVICE(&s->spi), 0, cs_line);
 +
      /* serial port */
      for (i = 0; i < 3; i++) {
          if (serial_hd(i)) {
-@@ -146,7 +164,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+@@ -146,7 +168,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
      }
  
      /* flash direct access */
@@ -127,10 +131,10 @@ index 702aa5e4df..82c7972a91 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628_SPI', if_true: files('mt7628-spi.c'))
 diff --git a/hw/ssi/mt7628-spi.c b/hw/ssi/mt7628-spi.c
 new file mode 100644
-index 0000000000..3a9808dad2
+index 0000000000..9edbbc54ce
 --- /dev/null
 +++ b/hw/ssi/mt7628-spi.c
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,283 @@
 +/*
 + * mt7628 spi master control
 + *
@@ -164,91 +168,209 @@ index 0000000000..3a9808dad2
 + * byte order select
 + */
 +
++/* #define DEBUG_MT7628_SPI */
++
++#ifdef DEBUG_MT7628_SPI
++#define DPRINTF(fmt, ...) \
++do { printf("mt7628-spi: " fmt , ## __VA_ARGS__); } while (0)
++#else
++#define DPRINTF(fmt, ...) do {} while (0)
++#endif
++
 +enum {
 +    REG_SPI_TRANS    = 0x00,
 +    REG_SPI_OPADDR   = 0x04,
 +    REG_SPI_DIDO0    = 0x08,
++    REG_SPI_DIDO1    = 0x0C,
++    REG_SPI_DIDO2    = 0x10,
++    REG_SPI_DIDO3    = 0x14,
++    REG_SPI_DIDO4    = 0x18,
++    REG_SPI_DIDO5    = 0x1C,
++    REG_SPI_DIDO6    = 0x20,
 +    REG_SPI_DIDO7    = 0x24,
 +    REG_SPI_MOREBUF  = 0x2C,
++    REG_SPI_MASTER   = 0x28,
++    REG_SPI_CS_POLAR = 0x38,
 +};
 +
-+#define REG_SPI_TRANS_START_SHIFT 8
-+#define REG_SPI_MOREBUF_TX_SHIFT 0
-+#define REG_SPI_MOREBUF_RX_SHIFT 12
-+#define REG_SPI_MOREBUF_CMD_SHIFT 24
-+#define REG_SPI_OPADDR_OPCODE_SHIFT 0
-+
-+#define REG_INDEX(offset)   (offset / sizeof(uint32_t))
++/* reg shift */
++#define TRANS_START 8
++#define TRANS_BUSY  16
++#define MOREBUF_TXBITCNT    0
++#define MOREBUF_RXBITCNT    12
++#define MOREBUF_CMDBITCNT   24
++#define MASTER_BUFMODE      2
++#define MASTER_FULL_DUPLEX  10
 +
 +static void mt7628_spi_transfer(mt7628SpiState *s)
 +{
-+    uint32_t *regs = s->regs;
++    if (s->trans_start == 0) {
++        return;
++    }
++    if (s->trans_busy  == 1) {
++        return;
++    }
++    s->trans_busy = 1;
 +
-+    uint32_t reg_spi_morebuf = regs[REG_INDEX(REG_SPI_MOREBUF)];
-+    uint8_t  tx_bits = reg_spi_morebuf >> REG_SPI_MOREBUF_TX_SHIFT;
-+    uint8_t  rx_bits = reg_spi_morebuf >> REG_SPI_MOREBUF_RX_SHIFT;
-+    /* write to slave : opcode + D0 D7 */
-+    int      tx_bytes = (tx_bits / 8) + 1;
-+    int      rx_bytes = (rx_bits / 8) + 1;
-+    uint8_t sendbuf[33];
-+    uint8_t recvbuf[32];
++    uint8_t txbuf[MT7628_SPI_TX_BUFSIZE];
++    uint8_t *txbufp = txbuf;
++    memset(txbuf, 0, MT7628_SPI_TX_BUFSIZE);
 +
-+    int recv_i, send_i;
-+    int len;
++    uint32_t val = s->opcode;
++    if ((s->cmd_bitcount / 8) == 4) {
++        /* The byte-order of the opcode is weird!    --- from linux kernel */
++        val = bswap_32(val);
++        DPRINTF("opcode len is 4, swap it! : %08X\n", val);
++    }
++    memcpy(txbufp, &val, s->cmd_bitcount / 8);
++    txbufp += s->cmd_bitcount / 8;
++    memcpy(txbufp, s->dido, s->tx_bitcount / 8);
++    txbufp += s->tx_bitcount / 8;
 +
-+    if (test_bit(REG_SPI_TRANS_START_SHIFT,
-+                 (void *)(regs + REG_INDEX(REG_SPI_TRANS))) == 0) {
-+        return; /* not need trans */
++    /* send opcode and data to slave */
++    int tx_i = 0;
++    while (tx_i < ((s->cmd_bitcount / 8) + (s->tx_bitcount / 8))) {
++        ssi_transfer(s->spi, txbuf[tx_i]);
++        DPRINTF("SEND TO SLAVE: %02X\n", txbuf[tx_i]);
++        tx_i++;
++    }
++    /* recv data from slave */
++    int rx_i = 0;
++    while (rx_i < (s->rx_bitcount / 8)) {
++        s->dido[rx_i] = ssi_transfer(s->spi, 0);
++        DPRINTF("RECV FROM SLAVE: %02X\n", s->dido[rx_i]);
++        rx_i++;
 +    }
 +
-+    sendbuf[0] = regs[REG_INDEX(REG_SPI_OPADDR)] >> REG_SPI_OPADDR_OPCODE_SHIFT;
-+    memcpy(sendbuf + 1, &regs[REG_INDEX(REG_SPI_DIDO0)], 32);
-+
-+    /* init recvbuf */
-+    memset(recvbuf, 0x00, 32);
-+
-+    /* skip opcode */
-+    recv_i = -1;
-+    send_i = 0;
-+
-+    len = MAX(rx_bytes, tx_bytes);
-+    while ((send_i < len) && (recv_i < 32)) {
-+        if (recv_i < 0) {
-+            ssi_transfer(s->spi, sendbuf[send_i]);
-+        } else {
-+            recvbuf[recv_i] = ssi_transfer(s->spi, sendbuf[send_i]);
-+        }
-+        recv_i++;
-+        send_i++;
-+    }
-+    memcpy(regs + REG_INDEX(REG_SPI_DIDO0), recvbuf, 32);
-+
-+    /* action is over, reset register */
-+    clear_bit(REG_SPI_TRANS_START_SHIFT,
-+              (void *)(regs + REG_INDEX(REG_SPI_TRANS)));
++    s->trans_busy = 0;
++    s->trans_start = 0;
++    return;
 +}
 +
 +static void mt7628_spi_reset(DeviceState *d)
 +{
 +    mt7628SpiState *s = MT7628_SPI(d);
-+    memset(s->regs, 0, sizeof(s->regs));
++    s->trans_start = 0;
++    s->trans_busy = 0;
++    s->bufmode = 0;
++    s->full_duplex = 0;
++    s->tx_bitcount = 0;
++    s->rx_bitcount = 0;
++    s->cmd_bitcount = 0;
++    s->opcode = 0;
++    memset(s->dido, 0x0, MT7628_SPI_RX_BUFSIZE);
++    s->cs = 0;
++    qemu_set_irq(s->cs_line, !(s->cs));
 +}
 +
 +static uint64_t mt7628_spi_read(void *opaque, hwaddr addr, unsigned int size)
 +{
 +    mt7628SpiState *s = opaque;
-+    uint32_t idx = REG_INDEX(addr);
-+    return s->regs[idx];
++    uint32_t val = 0x0;
++    uint32_t *data_reg = (uint32_t *)s->dido;
++    switch (addr) {
++    case REG_SPI_TRANS:
++        /* trans_start is always return 0 */
++        val |= s->trans_busy << TRANS_BUSY;
++        return val;
++    case REG_SPI_OPADDR:
++        val = s->opcode;
++        return val;
++    case REG_SPI_DIDO0:
++        return *(data_reg + 0);
++    case REG_SPI_DIDO1:
++        return *(data_reg + 1);
++    case REG_SPI_DIDO2:
++        return *(data_reg + 2);
++    case REG_SPI_DIDO3:
++        return *(data_reg + 3);
++    case REG_SPI_DIDO4:
++        return *(data_reg + 4);
++    case REG_SPI_DIDO5:
++        return *(data_reg + 5);
++    case REG_SPI_DIDO6:
++        return *(data_reg + 6);
++    case REG_SPI_DIDO7:
++        return *(data_reg + 7);
++    case REG_SPI_MOREBUF:
++        val |= s->tx_bitcount << MOREBUF_TXBITCNT;
++        val |= s->rx_bitcount << MOREBUF_RXBITCNT;
++        val |= s->cmd_bitcount << MOREBUF_CMDBITCNT;
++        return val;
++    case REG_SPI_MASTER:
++        val |= s->bufmode << MASTER_BUFMODE;
++        val |= s->full_duplex << MASTER_FULL_DUPLEX;
++        return val;
++    case REG_SPI_CS_POLAR:
++        val |= s->cs;
++        return val;
++    default:
++        return 0x0;
++    }
 +}
 +
 +static void mt7628_spi_write(void *opaque, hwaddr addr,
 +                             uint64_t val64, unsigned int size)
 +{
 +    mt7628SpiState *s = opaque;
++    uint32_t *data_reg = (uint32_t *)s->dido;
 +    uint32_t value = val64;
-+    uint32_t idx = REG_INDEX(addr);
-+    s->regs[idx] = value;
-+    mt7628_spi_transfer(s);
++    switch (addr) {
++    case REG_SPI_TRANS:
++        /* trans_busy is RO */
++        s->trans_start = test_bit(TRANS_START, (void *)&value);
++        break;
++    case REG_SPI_OPADDR:
++        s->opcode = value;
++        break;
++    case REG_SPI_DIDO0:
++        data_reg[0] = value;
++        break;
++    case REG_SPI_DIDO1:
++        data_reg[1] = value;
++        break;
++    case REG_SPI_DIDO2:
++        data_reg[2] = value;
++        break;
++    case REG_SPI_DIDO3:
++        data_reg[3] = value;
++        break;
++    case REG_SPI_DIDO4:
++        data_reg[4] = value;
++        break;
++    case REG_SPI_DIDO5:
++        data_reg[5] = value;
++        break;
++    case REG_SPI_DIDO6:
++        data_reg[6] = value;
++        break;
++    case REG_SPI_DIDO7:
++        data_reg[7] = value;
++        break;
++    case REG_SPI_MOREBUF:
++        s->tx_bitcount = extract32(value, MOREBUF_TXBITCNT, 9);
++        s->rx_bitcount = extract32(value, MOREBUF_RXBITCNT, 9);
++        s->cmd_bitcount = extract32(value, MOREBUF_CMDBITCNT, 6);
++        break;
++    case REG_SPI_MASTER:
++        s->bufmode     = test_bit(MASTER_BUFMODE, (void *)&value);
++        s->full_duplex = test_bit(MASTER_FULL_DUPLEX, (void *)&value);
++        break;
++    case REG_SPI_CS_POLAR:
++        s->cs = value;
++        if (s->cs) {
++            DPRINTF("CS ASSERT\n");
++        } else {
++            DPRINTF("CS DEASSERT\n");
++        }
++        qemu_set_irq(s->cs_line, !(s->cs));
++        break;
++    default:
++        break;
++    }
++    if (s->trans_start) {
++        mt7628_spi_transfer(s);
++    }
 +}
 +
 +static const MemoryRegionOps mt7628_spi_ops = {
@@ -271,6 +393,8 @@ index 0000000000..3a9808dad2
 +    memory_region_init_io(&s->mmio, OBJECT(s), &mt7628_spi_ops, s,
 +                          TYPE_MT7628_SPI, 0xFF);
 +    sysbus_init_mmio(sbd, &s->mmio);
++
++    sysbus_init_irq(sbd, &s->cs_line);
 +}
 +
 +static void mt7628_spi_class_init(ObjectClass *klass, void *data)
@@ -324,10 +448,10 @@ index 2570f87846..367b393215 100644
  };
 diff --git a/include/hw/ssi/mt7628-spi.h b/include/hw/ssi/mt7628-spi.h
 new file mode 100644
-index 0000000000..68978ce56c
+index 0000000000..27f93d2f63
 --- /dev/null
 +++ b/include/hw/ssi/mt7628-spi.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,47 @@
 +/*
 + * mt7628 spi master
 + *
@@ -344,17 +468,34 @@ index 0000000000..68978ce56c
 +#include "hw/sysbus.h"
 +#include "qom/object.h"
 +
-+#define MT7628_SPI_REG_NUM  (0xFF / 4)
-+
 +#define TYPE_MT7628_SPI "mt7628-spi"
 +OBJECT_DECLARE_SIMPLE_TYPE(mt7628SpiState, MT7628_SPI)
++
++#define MT7628_SPI_TX_BUFSIZE (36)
++#define MT7628_SPI_RX_BUFSIZE (32)
 +
 +struct mt7628SpiState {
 +    SysBusDevice parent_obj;
 +    MemoryRegion mmio;
-+
 +    SSIBus *spi;
-+    uint32_t regs[MT7628_SPI_REG_NUM];
++
++    bool cs;          /* 0 deassert, 1 assert */
++    qemu_irq cs_line;
++
++    bool bufmode;     /* 0 disable morebuf, 1 enable morebuf */
++    bool full_duplex; /* 0 half, 1 full   */
++
++    bool trans_busy;  /* 0 no task, 1 pending */
++    bool trans_start; /* write 1 start transfer action */
++
++    /* how many bits need transfer */
++    uint16_t tx_bitcount; /* 0 ~ 256 */
++    uint16_t rx_bitcount; /* 0 ~ 256 */
++    uint8_t cmd_bitcount; /* 0 ~ 32 */
++
++    uint32_t opcode;
++
++    uint8_t dido[MT7628_SPI_RX_BUFSIZE];
 +};
 +
 +#endif
