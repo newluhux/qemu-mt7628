@@ -1,0 +1,36 @@
+From 099a46e4e3603021a72816650a980dce65ba1a3c Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Mon, 30 Jan 2023 21:51:22 +0800
+Subject: [PATCH 6/7] hw/mips/mt7628.c: add unimp mediatek huart into memmap.
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ hw/mips/mt7628.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
+index b520a14c5f..1c468ba6c7 100644
+--- a/hw/mips/mt7628.c
++++ b/hw/mips/mt7628.c
+@@ -74,6 +74,9 @@ struct mt7628Unimplemented {
+     { "spi-slave",    0x10000700, 0xFF },
+     { "i2c",          0x10000900, 0xFF },
+     { "i2s",          0x10000A00, 0xFF },
++    { "hsuart0",      0x10000C20, 0x40 },
++    { "hsuart1",      0x10000D20, 0x40 },
++    { "hsuart2",      0x10000E20, 0x40 },
+     { "rgctl",        0x10001000, 2 * KiB },
+     { "pcm",          0x10002000, 2 * KiB },
+     { "dma",          0x10002800, 2 * KiB },
+@@ -151,7 +154,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
+                            serial_hd(i), DEVICE_NATIVE_ENDIAN);
+         } else {
+             create_unimplemented_device("uart",
+-                                        s->memmap[MT7628_DEV_UART0 + i], 256);
++                                        s->memmap[MT7628_DEV_UART0 + i], 32);
+         }
+     }
+ 
+-- 
+2.39.1
+

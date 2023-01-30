@@ -1,7 +1,7 @@
 From 946aae83b11981163297688ff114e77424248ab2 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 25 Jan 2023 19:22:31 +0800
-Subject: [PATCH 5/5] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
+Subject: [PATCH 5/7] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

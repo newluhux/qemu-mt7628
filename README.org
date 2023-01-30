@@ -12,6 +12,7 @@ I'm try add mt7628 support into qemu.
 | TIMER        | TODO   |
 | MEMC         | TODO   |
 | UART         | OK     |
+| HSUART       | TODO   |
 | SPI          | OK     |
 | EHCI         | OK     |
 | FLASH-DIRECT | OK     |
@@ -50,15 +51,19 @@ I found 'mt7628_evb' in uboot source code, but I can't found this board on taoba
 
 4. run qemu:
 
+because use 'uboot.elf'.
+
+you must select 'CONFIG_REMAKE_ELF=y' in uboot config file.
+
 #+BEGIN_SRC shell
  cd /path/to/qemu/
  ./qemu-system-mipsel -M vocore2 -m 128 \
+                -nographic \
 		-serial telnet:127.0.0.1:4000,server \
 		-serial telnet:127.0.0.1:4001,server \
 		-serial telnet:127.0.0.1:4002,server \
-		-drive if=pflash,index=0,file=/path/to/buildroot/output/images/flash_4M.bin,format=raw \
 		-drive if=mtd,index=0,file=/path/to/buildroot/output/images/flash_16M.bin,format=raw \
-		-kernel /path/to/buildroot/output/build/linux-VERSION/vmlinux \
+		-kernel /path/to/buildroot/output/build/u-boot-VERSION/uboot.elf \
 		-s -S
 #+END_SRC
 
@@ -66,26 +71,9 @@ connect to serial port:
 
 #+BEGIN_SRC shell
 telnet 127.0.0.1 4000 # UART0
+telnet 127.0.0.1 4001 # UART1
+telnet 127.0.0.1 4002 # UART2
 #+END_SRC
-
-5. how to debug
-
-ref: https://www.qemu.org/docs/master/system/gdb.html
-
-start gdb:
-
-#+BEGIN_SRC shell
- cd /path/to/buildroot/output/build/linux-VERSION/
- /path/to/buildroot/output/host/bin/mipsel-linux-gdb vmlinux
-#+END_SRC
-
-set gdb target:
-
-#+BEGIN_SRC text
- target remote localhost:1234
-#+END_SRC
-
-then use 'c'(continue) or 's'(step) or other gdb command to debug it.
 
 * license
 
@@ -115,3 +103,6 @@ same with qemu
              next is ethernet or pcie.
 
 2022/01/28:  spi master have bug, rewrite it, add chip select.
+
+2022/01/30:  uboot is working, you can use uboot to boot from
+             flash.

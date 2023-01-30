@@ -1,7 +1,7 @@
 From 36c226694332a7ab96b8583e5d6b93c56fe9b305 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 25 Jan 2023 18:32:11 +0800
-Subject: [PATCH 4/5] hw/block/m25p80.c: add w25q128.
+Subject: [PATCH 4/7] hw/block/m25p80.c: add w25q128.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

@@ -1,7 +1,7 @@
 From cbcada3cfb23acf2f8e88af1ff94d59b425da4df Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 18 Jan 2023 16:29:15 +0800
-Subject: [PATCH 1/5] hw/misc/mt7628-sysctrl.c: Add mt7628 system control
+Subject: [PATCH 1/7] hw/misc/mt7628-sysctrl.c: Add mt7628 system control
  support.
 
 Signed-off-by: LuHui <luhux76@gmail.com>

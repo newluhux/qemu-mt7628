@@ -1,7 +1,7 @@
 From 4343404b7d8e9588d3ac3de39fb7fbbf37daed0d Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Wed, 18 Jan 2023 17:06:02 +0800
-Subject: [PATCH 3/5] hw/mips/mt7628.c: add mt7628 soc support, add a mt7628
+Subject: [PATCH 3/7] hw/mips/mt7628.c: add mt7628 soc support, add a mt7628
  board VoCore2.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
