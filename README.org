@@ -57,12 +57,13 @@ you must select 'CONFIG_REMAKE_ELF=y' in uboot config file.
 
 #+BEGIN_SRC shell
  cd /path/to/qemu/
- ./qemu-system-mipsel -M vocore2 -m 128 \
+ ./qemu-system-mipsel -M mt7628 -m 128 \
                 -nographic \
 		-serial telnet:127.0.0.1:4000,server \
 		-serial telnet:127.0.0.1:4001,server \
 		-serial telnet:127.0.0.1:4002,server \
 		-drive if=mtd,index=0,file=/path/to/buildroot/output/images/flash_16M.bin,format=raw \
+		-drive if=pflash,index=0,file=/path/to/buildroot/output/images/flash_4M.bin,format=raw \
 		-kernel /path/to/buildroot/output/build/u-boot-VERSION/uboot.elf \
 		-s -S
 #+END_SRC
@@ -106,3 +107,5 @@ same with qemu
 
 2022/01/30:  uboot is working, you can use uboot to boot from
              flash.
+
+2022/02/04:  rewrite system control, merge vocore2 device to mt7628 device.

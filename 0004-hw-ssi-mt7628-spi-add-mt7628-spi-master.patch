@@ -1,113 +1,18 @@
-From 946aae83b11981163297688ff114e77424248ab2 Mon Sep 17 00:00:00 2001
+From 4fee1d66c1a3f332c39bde7a910c0f1f5d66fe33 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 25 Jan 2023 19:22:31 +0800
-Subject: [PATCH 5/7] hw/ssi/mt7628-spi.c: add mt7628 spi master support.
+Date: Sat, 4 Feb 2023 17:21:38 +0800
+Subject: [PATCH 4/5] hw/ssi/mt7628-spi: add mt7628 spi master
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
- hw/mips/Kconfig             |   2 +
- hw/mips/mt7628.c            |  26 +++-
  hw/ssi/Kconfig              |   4 +
  hw/ssi/meson.build          |   1 +
  hw/ssi/mt7628-spi.c         | 283 ++++++++++++++++++++++++++++++++++++
- include/hw/mips/mt7628.h    |   3 +
  include/hw/ssi/mt7628-spi.h |  47 ++++++
- 7 files changed, 364 insertions(+), 2 deletions(-)
+ 4 files changed, 335 insertions(+)
  create mode 100644 hw/ssi/mt7628-spi.c
  create mode 100644 include/hw/ssi/mt7628-spi.h
 
-diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
-index f7faec010c..d2838bde0c 100644
---- a/hw/mips/Kconfig
-+++ b/hw/mips/Kconfig
-@@ -13,6 +13,8 @@ config MIPSSIM
- config MT7628
-     bool
-     select SERIAL
-+    select MT7628_SPI
-+    select SSI_M25P80
-     select USB_EHCI
-     select USB_EHCI_SYSBUS
-     select UNIMP
-diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
-index d982b1c704..b520a14c5f 100644
---- a/hw/mips/mt7628.c
-+++ b/hw/mips/mt7628.c
-@@ -26,6 +26,8 @@
- #include "hw/char/serial.h"
- #include "hw/misc/unimp.h"
- #include "hw/mips/mt7628.h"
-+#include "hw/ssi/ssi.h"
-+#include "hw/ssi/mt7628-spi.h"
- #include "sysemu/sysemu.h"
- #include "hw/boards.h"
- #include "hw/loader.h"
-@@ -55,6 +57,7 @@ const hwaddr mt7628_memmap[] = {
-     [MT7628_DEV_UART1]        = 0x10000D00,
-     [MT7628_DEV_UART2]        = 0x10000E00,
-     [MT7628_DEV_EHCI]         = 0x101C0000,
-+    [MT7628_DEV_SPI]          = 0x10000B00,
-     [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
- };
- 
-@@ -71,7 +74,6 @@ struct mt7628Unimplemented {
-     { "spi-slave",    0x10000700, 0xFF },
-     { "i2c",          0x10000900, 0xFF },
-     { "i2s",          0x10000A00, 0xFF },
--    { "spi-master",   0x10000B00, 0xFF },
-     { "rgctl",        0x10001000, 2 * KiB },
-     { "pcm",          0x10002000, 2 * KiB },
-     { "dma",          0x10002800, 2 * KiB },
-@@ -93,6 +95,7 @@ static void mt7628_init(Object *obj)
- 
-     object_initialize_child(obj, "sysctrl", &s->sysctrl, TYPE_MT7628_SYSCTRL);
-     object_initialize_child(obj, "intc", &s->intc, TYPE_MT7628_INTC);
-+    object_initialize_child(obj, "spi", &s->spi, TYPE_MT7628_SPI);
-     if (machine_usb(current_machine)) {
-         object_initialize_child(obj, "ehci", &s->ehci, TYPE_PLATFORM_EHCI);
-     }
-@@ -102,6 +105,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
- {
-     mt7628State *s = MT7628(dev);
-     SysBusDevice *sysbusdev;
-+    DriveInfo *dinfo;
-     int i;
- 
-     if (!sysbus_realize(SYS_BUS_DEVICE(&s->intc), errp)) {
-@@ -120,6 +124,24 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
-     sysbus_mmio_map(SYS_BUS_DEVICE(&s->sysctrl), 0,
-                     s->memmap[MT7628_DEV_SYSCTRL]);
- 
-+    /* spi master */
-+    sysbus_realize(SYS_BUS_DEVICE(&s->spi), &error_fatal);
-+    sysbus_mmio_map(SYS_BUS_DEVICE(&s->spi), 0,
-+                    s->memmap[MT7628_DEV_SPI]);
-+
-+    /* spi nor flash */
-+    DeviceState *flash_dev;
-+    qemu_irq cs_line;
-+    dinfo = drive_get(IF_MTD, 0, 0);
-+    flash_dev = qdev_new("w25q128");
-+    if (dinfo) {
-+        qdev_prop_set_drive(flash_dev, "drive", blk_by_legacy_dinfo(dinfo));
-+    }
-+    mt7628SpiState *spi = &s->spi;
-+    qdev_realize_and_unref(flash_dev, BUS(spi->spi), &error_fatal);
-+    cs_line = qdev_get_gpio_in_named(flash_dev, SSI_GPIO_CS, 0);
-+    sysbus_connect_irq(SYS_BUS_DEVICE(&s->spi), 0, cs_line);
-+
-     /* serial port */
-     for (i = 0; i < 3; i++) {
-         if (serial_hd(i)) {
-@@ -146,7 +168,7 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
-     }
- 
-     /* flash direct access */
--    DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 0);
-+    dinfo = drive_get(IF_PFLASH, 0, 0);
-     if (dinfo) {
-         pflash_cfi01_register(s->memmap[MT7628_DEV_FLASH_DIRECT],
-                               "mt7628.flash0", 4 * MiB,
 diff --git a/hw/ssi/Kconfig b/hw/ssi/Kconfig
 index 7d90a02181..694e01ede1 100644
 --- a/hw/ssi/Kconfig
@@ -418,34 +323,6 @@ index 0000000000..9edbbc54ce
 +}
 +
 +type_init(mt7628_spi_register_types)
-diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
-index 2570f87846..367b393215 100644
---- a/include/hw/mips/mt7628.h
-+++ b/include/hw/mips/mt7628.h
-@@ -27,6 +27,7 @@
- #include "hw/usb/hcd-ehci.h"
- #include "hw/misc/mt7628-sysctrl.h"
- #include "hw/intc/mt7628-intc.h"
-+#include "hw/ssi/mt7628-spi.h"
- 
- /**
-  * MT7628 device list
-@@ -45,6 +46,7 @@ enum {
-     MT7628_DEV_UART0,
-     MT7628_DEV_UART1,
-     MT7628_DEV_UART2,
-+    MT7628_DEV_SPI,
-     MT7628_DEV_EHCI,
-     MT7628_DEV_FLASH_DIRECT,
- };
-@@ -70,6 +72,7 @@ struct mt7628State {
-     const hwaddr *memmap;
-     mt7628SysCtrlState sysctrl;
-     mt7628intcState intc;
-+    mt7628SpiState spi;
-     EHCISysBusState ehci;
-     MemoryRegion flash_direct;
- };
 diff --git a/include/hw/ssi/mt7628-spi.h b/include/hw/ssi/mt7628-spi.h
 new file mode 100644
 index 0000000000..27f93d2f63

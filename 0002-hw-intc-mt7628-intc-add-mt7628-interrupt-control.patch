@@ -1,27 +1,38 @@
-From f69ec1c8ebe48d2380e760dacdeaec3408679db5 Mon Sep 17 00:00:00 2001
+From 5316f5d6724fc8e938f9b77a29873671a485facb Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 18 Jan 2023 17:00:29 +0800
-Subject: [PATCH 2/7] hw/intc/mt7628-intc.c: add mt7628 interrupt control
- support.
+Date: Sat, 4 Feb 2023 17:20:24 +0800
+Subject: [PATCH 2/5] hw/intc/mt7628-intc: add mt7628 interrupt control
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
+ hw/intc/Kconfig               |   3 +
  hw/intc/meson.build           |   1 +
  hw/intc/mt7628-intc.c         | 155 ++++++++++++++++++++++++++++++++++
- include/hw/intc/mt7628-intc.h |  30 +++++++
- 3 files changed, 186 insertions(+)
+ include/hw/intc/mt7628-intc.h |  36 ++++++++
+ 4 files changed, 195 insertions(+)
  create mode 100644 hw/intc/mt7628-intc.c
  create mode 100644 include/hw/intc/mt7628-intc.h
 
+diff --git a/hw/intc/Kconfig b/hw/intc/Kconfig
+index 21441d0a0c..66d65a3eea 100644
+--- a/hw/intc/Kconfig
++++ b/hw/intc/Kconfig
+@@ -105,3 +105,6 @@ config LOONGARCH_PCH_MSI
+ 
+ config LOONGARCH_EXTIOI
+     bool
++
++config MT7628_INTC
++    bool
 diff --git a/hw/intc/meson.build b/hw/intc/meson.build
-index 8be459b41c..511b42fbd1 100644
+index 8be459b41c..1b360d3c95 100644
 --- a/hw/intc/meson.build
 +++ b/hw/intc/meson.build
 @@ -73,3 +73,4 @@ specific_ss.add(when: 'CONFIG_LOONGARCH_IPI', if_true: files('loongarch_ipi.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_PCH_PIC', if_true: files('loongarch_pch_pic.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_PCH_MSI', if_true: files('loongarch_pch_msi.c'))
  specific_ss.add(when: 'CONFIG_LOONGARCH_EXTIOI', if_true: files('loongarch_extioi.c'))
-+specific_ss.add(when: 'CONFIG_MT7628', if_true: files('mt7628-intc.c'))
++specific_ss.add(when: 'CONFIG_MT7628_INTC', if_true: files('mt7628-intc.c'))
 diff --git a/hw/intc/mt7628-intc.c b/hw/intc/mt7628-intc.c
 new file mode 100644
 index 0000000000..f900bf502f
@@ -185,12 +196,18 @@ index 0000000000..f900bf502f
 +type_init(mt7628_register_types);
 diff --git a/include/hw/intc/mt7628-intc.h b/include/hw/intc/mt7628-intc.h
 new file mode 100644
-index 0000000000..a2f4690d1d
+index 0000000000..bceff4ce2c
 --- /dev/null
 +++ b/include/hw/intc/mt7628-intc.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,36 @@
 +#ifndef MT7628_INTC_H
 +#define MT7628_INTC_H
++
++/* some code from linux kernel:
++ * arch/mips/ralink/irq.c
++ * Copyright (C) 2009 Gabor Juhos <juhosg@openwrt.org>
++ * Copyright (C) 2013 John Crispin <john@phrozen.org>
++ */
 +
 +#include "hw/sysbus.h"
 +#include "qom/object.h"

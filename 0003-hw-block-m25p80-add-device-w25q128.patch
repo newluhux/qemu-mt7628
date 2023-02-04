@@ -1,7 +1,7 @@
-From 36c226694332a7ab96b8583e5d6b93c56fe9b305 Mon Sep 17 00:00:00 2001
+From 31000780751e35aaef7b68a17e5c77a9abae1845 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 25 Jan 2023 18:32:11 +0800
-Subject: [PATCH 4/7] hw/block/m25p80.c: add w25q128.
+Date: Sat, 4 Feb 2023 17:20:53 +0800
+Subject: [PATCH 3/5] hw/block/m25p80: add device w25q128
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
