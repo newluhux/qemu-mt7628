@@ -1,15 +1,15 @@
-From 4fee1d66c1a3f332c39bde7a910c0f1f5d66fe33 Mon Sep 17 00:00:00 2001
+From a121918ee690d331531408cd94c0e253f0527bfa Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Sat, 4 Feb 2023 17:21:38 +0800
+Date: Sat, 4 Feb 2023 18:07:58 +0800
 Subject: [PATCH 4/5] hw/ssi/mt7628-spi: add mt7628 spi master
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  hw/ssi/Kconfig              |   4 +
  hw/ssi/meson.build          |   1 +
- hw/ssi/mt7628-spi.c         | 283 ++++++++++++++++++++++++++++++++++++
+ hw/ssi/mt7628-spi.c         | 288 ++++++++++++++++++++++++++++++++++++
  include/hw/ssi/mt7628-spi.h |  47 ++++++
- 4 files changed, 335 insertions(+)
+ 4 files changed, 340 insertions(+)
  create mode 100644 hw/ssi/mt7628-spi.c
  create mode 100644 include/hw/ssi/mt7628-spi.h
 
@@ -36,14 +36,19 @@ index 702aa5e4df..82c7972a91 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628_SPI', if_true: files('mt7628-spi.c'))
 diff --git a/hw/ssi/mt7628-spi.c b/hw/ssi/mt7628-spi.c
 new file mode 100644
-index 0000000000..9edbbc54ce
+index 0000000000..9728365f3b
 --- /dev/null
 +++ b/hw/ssi/mt7628-spi.c
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,288 @@
 +/*
 + * mt7628 spi master control
 + *
 + * Copyright (c) 2023 Lu Hui <luhux76@gmail.com>
++ * some code from linux kernel:
++ * drivers/spi/spi-mt7621.c
++ * Copyright (C) 2011 Sergiy <piratfm@gmail.com>
++ * Copyright (C) 2011-2013 Gabor Juhos <juhosg@openwrt.org>
++ * Copyright (C) 2014-2015 Felix Fietkau <nbd@nbd.name>
 + *
 + * This program is free software; you can redistribute it and/or modify it
 + * under the terms and conditions of the GNU General Public License,
@@ -124,7 +129,7 @@ index 0000000000..9edbbc54ce
 +    uint32_t val = s->opcode;
 +    if ((s->cmd_bitcount / 8) == 4) {
 +        /* The byte-order of the opcode is weird!    --- from linux kernel */
-+        val = bswap_32(val);
++        val = bswap32(val);
 +        DPRINTF("opcode len is 4, swap it! : %08X\n", val);
 +    }
 +    memcpy(txbufp, &val, s->cmd_bitcount / 8);
