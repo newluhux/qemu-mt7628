@@ -1,7 +1,7 @@
 From f96558b6428adee857035b03533556c17c41ec53 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Sat, 4 Feb 2023 18:08:15 +0800
-Subject: [PATCH 5/5] hw/mips/mt7628: add new device mt7628
+Subject: [PATCH 5/6] hw/mips/mt7628: add new device mt7628
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

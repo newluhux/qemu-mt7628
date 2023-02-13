@@ -16,7 +16,7 @@ I'm try add mt7628 support into qemu.
 | SPI          | OK     |
 | EHCI         | OK     |
 | FLASH-DIRECT | OK     |
-| ETHERNET     | TODO   |
+| ETHERNET     | OK     |
 | SDXC         | TODO   |
 | GPIO         | TODO   |
 | PCIE         | TODO   |
@@ -64,6 +64,7 @@ you must select 'CONFIG_REMAKE_ELF=y' in uboot config file.
 		-serial telnet:127.0.0.1:4002,server \
 		-drive if=mtd,index=0,file=/path/to/buildroot/output/images/flash_16M.bin,format=raw \
 		-drive if=pflash,index=0,file=/path/to/buildroot/output/images/flash_4M.bin,format=raw \
+		-object filter-dump,id=f1,netdev=hub0port0,file=dump.dat \
 		-kernel /path/to/buildroot/output/build/u-boot-VERSION/uboot.elf \
 		-s -S
 #+END_SRC
@@ -75,6 +76,10 @@ telnet 127.0.0.1 4000 # UART0
 telnet 127.0.0.1 4001 # UART1
 telnet 127.0.0.1 4002 # UART2
 #+END_SRC
+
+look network traffic:
+
+use wireshark open 'dump.dat'
 
 * license
 
@@ -109,3 +114,5 @@ same with qemu
              flash.
 
 2022/02/04:  rewrite system control, merge vocore2 device to mt7628 device.
+
+2022/02/13:  write a ethernet emulate, uboot bootp can working.

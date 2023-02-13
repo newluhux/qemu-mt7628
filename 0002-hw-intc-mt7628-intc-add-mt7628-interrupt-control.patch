@@ -1,7 +1,7 @@
 From 5316f5d6724fc8e938f9b77a29873671a485facb Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Sat, 4 Feb 2023 17:20:24 +0800
-Subject: [PATCH 2/5] hw/intc/mt7628-intc: add mt7628 interrupt control
+Subject: [PATCH 2/6] hw/intc/mt7628-intc: add mt7628 interrupt control
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
