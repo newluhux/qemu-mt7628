@@ -2,29 +2,28 @@
 
 I'm try add mt7628 support into qemu.
 
-* support
+* hardware support
 
-| hardware     | status |  
-|--------------+--------|
-| DDR 256MiB   | OK     |
-| SYSCTL       | OK     |
-| INTC         | OK     |
-| TIMER        | TODO   |
-| MEMC         | TODO   |
-| UART         | OK     |
-| HSUART       | TODO   |
-| I2C          | TODO   |
-| AUDIO        | TODO   |
-| GDMA         | TODO   |
-| SPI MASTER   | OK     |
-| EHCI         | OK     |
-| OHCI         | OK     |
-| FLASH-DIRECT | OK     |
-| ETHERNET     | OK     |
-| SDXC         | TODO   |
-| GPIO         | TODO   |
-| PCIE         | TODO   |
-
+| hardware     | status | test result          |
+|--------------+--------+----------------------|
+| DDR 256MiB   | OK     | uboot ok, linux ok   |
+| SYSCTL       | OK     | uboot ok, linux ok   |
+| INTC         | OK     | linux ok             |
+| TIMER        | TODO   |                      |
+| MEMC         | TODO   | uboot spl failed     |
+| UART         | OK     | uboot ok, linux ok   |
+| HSUART       | TODO   |                      |
+| I2C          | TODO   |                      |
+| AUDIO        | TODO   |                      |
+| GDMA         | TODO   |                      |
+| SPI MASTER   | OK     | uboot ok, linux ok   |
+| EHCI         | OK     | uboot ok, linux ok   |
+| OHCI         | OK     | uboot ok, linux ok   |
+| FLASH-DIRECT | OK     | uboot ok, linux ok   |
+| ETHERNET     | OK     | uboot ok, linux fail |
+| SDXC         | TODO   |                      |
+| GPIO         | TODO   |                      |
+| PCIE         | TODO   |                      |
 
 * how to run it
 
