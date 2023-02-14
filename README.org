@@ -13,7 +13,10 @@ I'm try add mt7628 support into qemu.
 | MEMC         | TODO   |
 | UART         | OK     |
 | HSUART       | TODO   |
-| SPI          | OK     |
+| I2C          | TODO   |
+| AUDIO        | TODO   |
+| GDMA         | TODO   |
+| SPI MASTER   | OK     |
 | EHCI         | OK     |
 | OHCI         | OK     |
 | FLASH-DIRECT | OK     |
@@ -119,4 +122,3 @@ same with qemu
 2022/02/13:  write a ethernet emulate, uboot bootp can working.
 
 2022/02/14:  fix ethernet recive missing some packet, add ohci.
-
