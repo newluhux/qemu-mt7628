@@ -1,16 +1,16 @@
-From f96558b6428adee857035b03533556c17c41ec53 Mon Sep 17 00:00:00 2001
+From 3cb79f15c9b512c76bd93f6be714d330f57fe16a Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Sat, 4 Feb 2023 18:08:15 +0800
-Subject: [PATCH 5/6] hw/mips/mt7628: add new device mt7628
+Date: Tue, 14 Feb 2023 22:46:30 +0800
+Subject: [PATCH 6/6] hw/mips/mt7628: add mt7628 soc emulation.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  configs/devices/mips-softmmu/common.mak |   1 +
- hw/mips/Kconfig                         |  11 +
+ hw/mips/Kconfig                         |  12 +
  hw/mips/meson.build                     |   1 +
- hw/mips/mt7628.c                        | 351 ++++++++++++++++++++++++
- include/hw/mips/mt7628.h                |  80 ++++++
- 5 files changed, 444 insertions(+)
+ hw/mips/mt7628.c                        | 370 ++++++++++++++++++++++++
+ include/hw/mips/mt7628.h                |  84 ++++++
+ 5 files changed, 468 insertions(+)
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 include/hw/mips/mt7628.h
 
@@ -24,10 +24,10 @@ index 7da99327a7..9731708025 100644
  CONFIG_TEST_DEVICES=y
 +CONFIG_MT7628=y
 diff --git a/hw/mips/Kconfig b/hw/mips/Kconfig
-index da3a37e215..f5f4d884fd 100644
+index da3a37e215..964b34a7e0 100644
 --- a/hw/mips/Kconfig
 +++ b/hw/mips/Kconfig
-@@ -10,6 +10,17 @@ config MIPSSIM
+@@ -10,6 +10,18 @@ config MIPSSIM
      select SERIAL_ISA
      select MIPSNET
  
@@ -40,6 +40,7 @@ index da3a37e215..f5f4d884fd 100644
 +    select SSI_M25P80
 +    select USB_EHCI
 +    select USB_EHCI_SYSBUS
++    select USB_OHCI
 +    select UNIMP
 +
  config JAZZ
@@ -59,10 +60,10 @@ index 900613fc08..98fc904917 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..20838dce51
+index 0000000000..6d3cacf404
 --- /dev/null
 +++ b/hw/mips/mt7628.c
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,370 @@
 +/*
 + * QEMU/mt7628 emulation
 + *
@@ -93,6 +94,7 @@ index 0000000000..20838dce51
 +#include "hw/mips/cpudevs.h"
 +#include "hw/mips/bios.h"
 +#include "hw/usb/hcd-ehci.h"
++#include "hw/usb/hcd-ohci.h"
 +#include "hw/char/serial.h"
 +#include "hw/misc/unimp.h"
 +#include "hw/mips/mt7628.h"
@@ -125,7 +127,9 @@ index 0000000000..20838dce51
 +    [MT7628_DEV_UART1]        = 0x10000D00,
 +    [MT7628_DEV_UART2]        = 0x10000E00,
 +    [MT7628_DEV_EHCI]         = 0x101C0000,
++    [MT7628_DEV_OHCI]         = 0x101C1000,
 +    [MT7628_DEV_SPI]          = 0x10000B00,
++    [MT7628_DEV_ETH]          = 0x10100000,
 +    [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
 +};
 +
@@ -150,8 +154,6 @@ index 0000000000..20838dce51
 +    { "dma",          0x10002800, 2 * KiB },
 +    { "aes",          0x10004000, 4 * KiB },
 +    { "pwm",          0x10005000, 4 * KiB },
-+    { "ethernet-phy", 0x10100000, 64 * KiB },
-+    { "ethernet",     0x10110000, 32 * KiB },
 +    { "usb-phy",      0x10120000, 32 * KiB },
 +    { "sdxc",         0x10130000, 32 * KiB },
 +    { "pcie",         0x10140000, 256 * KiB },
@@ -167,8 +169,10 @@ index 0000000000..20838dce51
 +    object_initialize_child(obj, "sysctrl", &s->sysctrl, TYPE_MT7628_SYSCTRL);
 +    object_initialize_child(obj, "intc", &s->intc, TYPE_MT7628_INTC);
 +    object_initialize_child(obj, "spi", &s->spi, TYPE_MT7628_SPI);
++    object_initialize_child(obj, "eth", &s->eth, TYPE_MT7628_ETH);
 +    if (machine_usb(current_machine)) {
 +        object_initialize_child(obj, "ehci", &s->ehci, TYPE_PLATFORM_EHCI);
++        object_initialize_child(obj, "ohci", &s->ohci, TYPE_SYSBUS_OHCI);
 +    }
 +}
 +
@@ -248,17 +252,33 @@ index 0000000000..20838dce51
 +                       qdev_get_gpio_in(dev, IRQ_UART0 + i));
 +    }
 +
-+    /* usb 2.0 host */
++    /* usb host */
 +    if (machine_usb(current_machine)) {
 +        sysbus_realize(SYS_BUS_DEVICE(&s->ehci), &error_fatal);
 +        sysbus_mmio_map(SYS_BUS_DEVICE(&s->ehci), 0,
 +                        s->memmap[MT7628_DEV_EHCI]);
 +        sysbus_connect_irq(SYS_BUS_DEVICE(&s->ehci), 0,
 +                           qdev_get_gpio_in(dev, IRQ_EHCI));
++        sysbus_realize(SYS_BUS_DEVICE(&s->ohci), &error_fatal);
++        sysbus_mmio_map(SYS_BUS_DEVICE(&s->ohci), 0,
++                        s->memmap[MT7628_DEV_OHCI]);
++        sysbus_connect_irq(SYS_BUS_DEVICE(&s->ohci), 0,
++                           qdev_get_gpio_in(dev, IRQ_EHCI));
 +    } else {
 +        create_unimplemented_device("ehci", s->memmap[MT7628_DEV_EHCI],
 +                                    256 * KiB);
++        create_unimplemented_device("ohci", s->memmap[MT7628_DEV_OHCI],
++                                    256 * KiB);
 +    }
++
++    /* ethernet */
++    if (nd_table[0].used) {
++        qemu_check_nic_model(&nd_table[0], TYPE_MT7628_ETH);
++        qdev_set_nic_properties(DEVICE(&s->eth), &nd_table[0]);
++    }
++    sysbus_realize(SYS_BUS_DEVICE(&s->eth), &error_fatal);
++    sysbus_mmio_map(SYS_BUS_DEVICE(&s->eth), 0,
++                    s->memmap[MT7628_DEV_ETH]);
 +
 +    /* Unimplemented devices */
 +    for (i = 0; i < ARRAY_SIZE(unimplemented); i++) {
@@ -416,10 +436,10 @@ index 0000000000..20838dce51
 +DEFINE_MACHINE("mt7628", mt7628_machine_init)
 diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
 new file mode 100644
-index 0000000000..367b393215
+index 0000000000..e4ae2905a2
 --- /dev/null
 +++ b/include/hw/mips/mt7628.h
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,84 @@
 +/*
 + * MT7628 System on Chip emulation
 + *
@@ -450,6 +470,7 @@ index 0000000000..367b393215
 +#include "hw/misc/mt7628-sysctrl.h"
 +#include "hw/intc/mt7628-intc.h"
 +#include "hw/ssi/mt7628-spi.h"
++#include "hw/net/mt7628-eth.h"
 +
 +/**
 + * MT7628 device list
@@ -470,6 +491,8 @@ index 0000000000..367b393215
 +    MT7628_DEV_UART2,
 +    MT7628_DEV_SPI,
 +    MT7628_DEV_EHCI,
++    MT7628_DEV_OHCI,
++    MT7628_DEV_ETH,
 +    MT7628_DEV_FLASH_DIRECT,
 +};
 +
@@ -479,7 +502,6 @@ index 0000000000..367b393215
 +
 +enum {
 +    MT7628_CPU_IRQ_INTC = 2,
-+    MT7628_CPU_IRQ_PCIE = 4,
 +};
 +
 +#define TYPE_MT7628 "mt7628"
@@ -496,6 +518,8 @@ index 0000000000..367b393215
 +    mt7628intcState intc;
 +    mt7628SpiState spi;
 +    EHCISysBusState ehci;
++    OHCISysBusState ohci;
++    mt7628EthState eth;
 +    MemoryRegion flash_direct;
 +};
 +

@@ -1,15 +1,16 @@
-From 14d45f48ae087927f13f7c7f6b459a5d1b8543f2 Mon Sep 17 00:00:00 2001
+From d48bbc2c40d69bb9021dc62029507aa4635f93ab Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Sat, 4 Feb 2023 17:18:59 +0800
+Date: Tue, 14 Feb 2023 22:42:44 +0800
 Subject: [PATCH 1/6] hw/misc/mt7628-sysctrl: add mt7628 system control
+ emulation.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  hw/misc/Kconfig                  |   3 +
  hw/misc/meson.build              |   3 +
- hw/misc/mt7628-sysctrl.c         | 185 +++++++++++++++++++++++++++++++
+ hw/misc/mt7628-sysctrl.c         | 186 +++++++++++++++++++++++++++++++
  include/hw/misc/mt7628-sysctrl.h |  53 +++++++++
- 4 files changed, 244 insertions(+)
+ 4 files changed, 245 insertions(+)
  create mode 100644 hw/misc/mt7628-sysctrl.c
  create mode 100644 include/hw/misc/mt7628-sysctrl.h
 
@@ -38,10 +39,10 @@ index 448e14b531..31470d8326 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628_SYSCTRL', if_true: files('mt7628-sysctrl.c'))
 diff --git a/hw/misc/mt7628-sysctrl.c b/hw/misc/mt7628-sysctrl.c
 new file mode 100644
-index 0000000000..a2cc67a97a
+index 0000000000..4c71ad641a
 --- /dev/null
 +++ b/hw/misc/mt7628-sysctrl.c
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,186 @@
 +/*
 + * Mediatek mt7628 System Control emulation
 + *
@@ -174,6 +175,7 @@ index 0000000000..a2cc67a97a
 +    /* Set default values for registers */
 +    memcpy(&s->chipname0, "MT76", 4);
 +    memcpy(&s->chipname1, "28  ", 4);
++    s->reset_system = 0;
 +}
 +
 +static void mt7628_sysctrl_init(Object *obj)

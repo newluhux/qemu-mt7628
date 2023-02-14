@@ -15,6 +15,7 @@ I'm try add mt7628 support into qemu.
 | HSUART       | TODO   |
 | SPI          | OK     |
 | EHCI         | OK     |
+| OHCI         | OK     |
 | FLASH-DIRECT | OK     |
 | ETHERNET     | OK     |
 | SDXC         | TODO   |
@@ -116,3 +117,6 @@ same with qemu
 2022/02/04:  rewrite system control, merge vocore2 device to mt7628 device.
 
 2022/02/13:  write a ethernet emulate, uboot bootp can working.
+
+2022/02/14:  fix ethernet recive missing some packet, add ohci.
+

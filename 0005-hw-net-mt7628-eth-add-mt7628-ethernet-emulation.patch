@@ -1,66 +1,17 @@
-From 80403004baf8e9e903418ca0d1d3d20332981d00 Mon Sep 17 00:00:00 2001
+From 4300065ddbc211bc73c38be584b0cee9862b9166 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Mon, 13 Feb 2023 21:57:18 +0800
-Subject: [PATCH 6/6] hw/net/mt7628-eth: add mt7628 ethernet emulate
+Date: Tue, 14 Feb 2023 22:46:01 +0800
+Subject: [PATCH 5/6] hw/net/mt7628-eth: add mt7628 ethernet emulation.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
- hw/mips/mt7628.c            |  15 +-
  hw/net/meson.build          |   1 +
- hw/net/mt7628-eth.c         | 583 ++++++++++++++++++++++++++++++++++++
- include/hw/mips/mt7628.h    |   4 +
- include/hw/net/mt7628-eth.h |  86 ++++++
- 5 files changed, 687 insertions(+), 2 deletions(-)
+ hw/net/mt7628-eth.c         | 632 ++++++++++++++++++++++++++++++++++++
+ include/hw/net/mt7628-eth.h |  91 ++++++
+ 3 files changed, 724 insertions(+)
  create mode 100644 hw/net/mt7628-eth.c
  create mode 100644 include/hw/net/mt7628-eth.h
 
-diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
-index 20838dce51..6df5d2d537 100644
---- a/hw/mips/mt7628.c
-+++ b/hw/mips/mt7628.c
-@@ -61,6 +61,7 @@ const hwaddr mt7628_memmap[] = {
-     [MT7628_DEV_UART2]        = 0x10000E00,
-     [MT7628_DEV_EHCI]         = 0x101C0000,
-     [MT7628_DEV_SPI]          = 0x10000B00,
-+    [MT7628_DEV_ETH]          = 0x10100000,
-     [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
- };
- 
-@@ -85,8 +86,6 @@ struct mt7628Unimplemented {
-     { "dma",          0x10002800, 2 * KiB },
-     { "aes",          0x10004000, 4 * KiB },
-     { "pwm",          0x10005000, 4 * KiB },
--    { "ethernet-phy", 0x10100000, 64 * KiB },
--    { "ethernet",     0x10110000, 32 * KiB },
-     { "usb-phy",      0x10120000, 32 * KiB },
-     { "sdxc",         0x10130000, 32 * KiB },
-     { "pcie",         0x10140000, 256 * KiB },
-@@ -102,6 +101,7 @@ static void mt7628_init(Object *obj)
-     object_initialize_child(obj, "sysctrl", &s->sysctrl, TYPE_MT7628_SYSCTRL);
-     object_initialize_child(obj, "intc", &s->intc, TYPE_MT7628_INTC);
-     object_initialize_child(obj, "spi", &s->spi, TYPE_MT7628_SPI);
-+    object_initialize_child(obj, "eth", &s->eth, TYPE_MT7628_ETH);
-     if (machine_usb(current_machine)) {
-         object_initialize_child(obj, "ehci", &s->ehci, TYPE_PLATFORM_EHCI);
-     }
-@@ -195,6 +195,17 @@ static void mt7628_realize(DeviceState *dev, Error **errp)
-                                     256 * KiB);
-     }
- 
-+    /* ethernet */
-+    if (nd_table[0].used) {
-+        qemu_check_nic_model(&nd_table[0], TYPE_MT7628_ETH);
-+        qdev_set_nic_properties(DEVICE(&s->eth), &nd_table[0]);
-+    }
-+    sysbus_realize(SYS_BUS_DEVICE(&s->eth), &error_fatal);
-+    sysbus_mmio_map(SYS_BUS_DEVICE(&s->eth), 0,
-+                    s->memmap[MT7628_DEV_ETH]);
-+    sysbus_connect_irq(SYS_BUS_DEVICE(&s->eth), 0,
-+                           env->irq[MT7628_CPU_IRQ_ETH]);
-+
-     /* Unimplemented devices */
-     for (i = 0; i < ARRAY_SIZE(unimplemented); i++) {
-         create_unimplemented_device(unimplemented[i].device_name,
 diff --git a/hw/net/meson.build b/hw/net/meson.build
 index ebac261542..483265fd21 100644
 --- a/hw/net/meson.build
@@ -75,10 +26,10 @@ index ebac261542..483265fd21 100644
  softmmu_ss.add(when: 'CONFIG_STELLARIS_ENET', if_true: files('stellaris_enet.c'))
 diff --git a/hw/net/mt7628-eth.c b/hw/net/mt7628-eth.c
 new file mode 100644
-index 0000000000..6ecf9ed779
+index 0000000000..fe48297e9a
 --- /dev/null
 +++ b/hw/net/mt7628-eth.c
-@@ -0,0 +1,583 @@
+@@ -0,0 +1,632 @@
 +/*
 + * Mediatek mt7628 ethernet emulation
 + *
@@ -115,9 +66,9 @@ index 0000000000..6ecf9ed779
 +#include "exec/address-spaces.h"
 +
 +/*
-+ * TODO:
-+ * impl other dma ring
-+ * impl dma enable and dma disable
++ * note:
++ * this emulation only work for uboot mt7628-net driver.
++ * if you need run openwrt's linux driver, you need impl interrupt
 + */
 +
 +/* #define DEBUG_MT7628_ETH 1 */
@@ -140,6 +91,10 @@ index 0000000000..6ecf9ed779
 +    REG_RX_MAX_CNT0  = 0x00904,
 +    REG_RX_CTX_IDX0  = 0x00908,
 +    REG_RX_DTX_IDX0  = 0x0090C,
++
++    REG_PDMA_GLO_CFG = 0x00A04,
++    REG_INT_STATUS   = 0x00A20,
++    REG_INT_ENABLE   = 0x00A28,
 +
 +    REG_MAC_ADDR_L   = 0x00C0C,
 +    REG_MAC_ADDR_H   = 0x00C10,
@@ -164,6 +119,11 @@ index 0000000000..6ecf9ed779
 +#define PCR1_RD_RDY  1
 +#define PCR1_RD_DATA 16
 +
++#define TX_DMA_ENABLE 0
++#define RX_DMA_ENABLE 2
++#define TX_DMA_STATUS 1
++#define RX_DMA_STATUS 3
++
 +/* TODO: need dump from real board */
 +#define MT7628_PHYID1       0xBADB
 +#define MT7628_PHYID2       0xADBA
@@ -178,7 +138,6 @@ index 0000000000..6ecf9ed779
 +        s->bmsr &= ~(MII_BMSR_LINK_ST | MII_BMSR_AN_COMP);
 +        s->anlpar = MII_ANAR_TX;
 +    }
-+    DPRINTF("%s: link set to %d\n", __func__, link_ok);
 +}
 +
 +static void mt7628_eth_mii_reset(mt7628EthState *s, bool link_ok)
@@ -263,6 +222,14 @@ index 0000000000..6ecf9ed779
 +    mt7628EthState *s = MT7628_ETH(opaque);
 +    NetClientState *nc = qemu_get_queue(s->nic);
 +
++    /* dma not start */
++    if (s->tx_dma_enable == 0) {
++        return;
++    }
++    /* dma is pending */
++    if (s->tx_dma_status == 1) {
++        return;
++    }
 +    /* dma address not setup */
 +    if (s->tx_ring_base == 0) {
 +        return;
@@ -346,6 +313,12 @@ index 0000000000..6ecf9ed779
 +        return val;
 +    case REG_RX_DTX_IDX0:
 +        val = s->rx_ring_dma_idx;
++        return val;
++    case REG_PDMA_GLO_CFG:
++        val |= s->rx_dma_enable << RX_DMA_ENABLE;
++        val |= s->tx_dma_enable << TX_DMA_ENABLE;
++        val |= s->rx_dma_status << RX_DMA_STATUS;
++        val |= s->tx_dma_status << TX_DMA_STATUS;
 +        return val;
 +    case REG_TX_BYTES:
 +        val = s->tx_bytes;
@@ -440,6 +413,10 @@ index 0000000000..6ecf9ed779
 +                s->conf.macaddr.a[3], s->conf.macaddr.a[2],
 +                s->conf.macaddr.a[1], s->conf.macaddr.a[0]);
 +        break;
++    case REG_PDMA_GLO_CFG:
++        s->rx_dma_enable = test_bit(RX_DMA_ENABLE, (void *)&val);
++        s->tx_dma_enable = test_bit(TX_DMA_ENABLE, (void *)&val);
++        break;
 +    case REG_SWITCH_PCR0:
 +        s->pcr_phy_addr = extract32(val, PCR0_PHY_ADDR, 5);
 +        s->pcr_phy_addr_reg = extract32(val, PCR0_PHY_ADDR_REG, 5);
@@ -475,6 +452,11 @@ index 0000000000..6ecf9ed779
 +{
 +    mt7628EthState *s = MT7628_ETH(dev);
 +    NetClientState *nc = qemu_get_queue(s->nic);
++
++    s->rx_dma_enable = 0;
++    s->tx_dma_enable = 0;
++    s->rx_dma_status = 0;
++    s->tx_dma_status = 0;
 +
 +    s->rx_ring_base = 0;
 +    s->rx_ring_idx_max = 0;
@@ -513,8 +495,6 @@ index 0000000000..6ecf9ed779
 +    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
 +    mt7628EthState *s = MT7628_ETH(obj);
 +
-+    sysbus_init_irq(sbd, &s->parent_irq);
-+
 +    /* Memory mapping */
 +    memory_region_init_io(&s->iomem, OBJECT(s), &mt7628_eth_ops, s,
 +                          TYPE_MT7628_ETH, 96 * KiB);
@@ -533,17 +513,30 @@ index 0000000000..6ecf9ed779
 +static bool mt7628_eth_can_receive(NetClientState *nc)
 +{
 +    mt7628EthState *s = qemu_get_nic_opaque(nc);
++    if (s->rx_dma_enable == 0) {
++        DPRINTF("%s: rx dma not enable\n", __func__);
++        return 0; /* dma not enable */
++    }
++    if (s->rx_dma_status == 1) {
++        DPRINTF("%s: rx dma is busy\n", __func__);
++        return 0; /* dma is busy */
++    }
 +    if (s->rx_ring_base == 0) {
++        DPRINTF("%s: rx ring base not setup\n", __func__);
 +        return 0; /* ring address not setup */
 +    }
 +    if (s->rx_ring_idx_max == 0) {
++        DPRINTF("%s: rx ring range not setup\n", __func__);
 +        return 0; /* dma ring range not setup */
 +    }
 +
 +    struct mt7628_eth_dma_ring ring;
 +    uint32_t ring_addr;
 +
-+    s->rx_ring_dma_idx = s->rx_ring_cpu_idx;
++    s->rx_ring_dma_idx = s->rx_ring_cpu_idx + 1;
++    if (s->rx_ring_dma_idx >= s->rx_ring_idx_max) {
++        s->rx_ring_dma_idx = 0;
++    }
 +    ring_addr = GET_RING_ADDR(s->rx_ring_base, s->rx_ring_dma_idx);
 +    DPRINTF("%s: read dma ring from : %08x\n", __func__, ring_addr);
 +    dma_memory_read(&address_space_memory, ring_addr, &ring, sizeof(ring),
@@ -555,6 +548,7 @@ index 0000000000..6ecf9ed779
 +    }
 +
 +    if (ring.pkt_addr == 0) {
++        DPRINTF("%s: pkt addr not setup\n", __func__);
 +        return 0; /* address not setup */
 +    }
 +
@@ -574,6 +568,9 @@ index 0000000000..6ecf9ed779
 +
 +    uint32_t ring_addr;
 +    struct mt7628_eth_dma_ring ring;
++
++    /* dma is pending */
++    s->rx_dma_status = 1;
 +
 +    /* rx_ring_dma_idx is setup by function mt7628_eth_can_recive() */
 +    ring_addr = GET_RING_ADDR(s->rx_ring_base, s->rx_ring_dma_idx);
@@ -606,6 +603,9 @@ index 0000000000..6ecf9ed779
 +    s->rx_packets += 1;
 +    DPRINTF("%s: rx bytes total %x\n", __func__, s->rx_bytes);
 +    DPRINTF("%s: rx packets total %x\n", __func__, s->rx_packets);
++
++    /* dma is over */
++    s->rx_dma_status = 0;
 +    return size;
 +}
 +
@@ -662,48 +662,12 @@ index 0000000000..6ecf9ed779
 +}
 +
 +type_init(mt7628_eth_register)
-diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
-index 367b393215..d531b31636 100644
---- a/include/hw/mips/mt7628.h
-+++ b/include/hw/mips/mt7628.h
-@@ -28,6 +28,7 @@
- #include "hw/misc/mt7628-sysctrl.h"
- #include "hw/intc/mt7628-intc.h"
- #include "hw/ssi/mt7628-spi.h"
-+#include "hw/net/mt7628-eth.h"
- 
- /**
-  * MT7628 device list
-@@ -48,6 +49,7 @@ enum {
-     MT7628_DEV_UART2,
-     MT7628_DEV_SPI,
-     MT7628_DEV_EHCI,
-+    MT7628_DEV_ETH,
-     MT7628_DEV_FLASH_DIRECT,
- };
- 
-@@ -58,6 +60,7 @@ enum {
- enum {
-     MT7628_CPU_IRQ_INTC = 2,
-     MT7628_CPU_IRQ_PCIE = 4,
-+    MT7628_CPU_IRQ_ETH  = 5,
- };
- 
- #define TYPE_MT7628 "mt7628"
-@@ -74,6 +77,7 @@ struct mt7628State {
-     mt7628intcState intc;
-     mt7628SpiState spi;
-     EHCISysBusState ehci;
-+    mt7628EthState eth;
-     MemoryRegion flash_direct;
- };
- 
 diff --git a/include/hw/net/mt7628-eth.h b/include/hw/net/mt7628-eth.h
 new file mode 100644
-index 0000000000..41fc8e7fc5
+index 0000000000..9773ab013e
 --- /dev/null
 +++ b/include/hw/net/mt7628-eth.h
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,91 @@
 +/*
 + * Mediatek mt7628 ethernet emulation
 + *
@@ -747,9 +711,14 @@ index 0000000000..41fc8e7fc5
 +struct mt7628EthState {
 +    SysBusDevice parent_obj;
 +    MemoryRegion iomem;
-+    qemu_irq parent_irq;
 +    NICState *nic;
 +    NICConf conf;
++
++    /* dma status */
++    bool rx_dma_enable;
++    bool tx_dma_enable;
++    bool rx_dma_status;
++    bool tx_dma_status;
 +
 +    /* rx ring */
 +    uint32_t rx_ring_base;

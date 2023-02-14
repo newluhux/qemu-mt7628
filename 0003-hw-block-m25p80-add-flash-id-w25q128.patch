@@ -1,7 +1,7 @@
-From 31000780751e35aaef7b68a17e5c77a9abae1845 Mon Sep 17 00:00:00 2001
+From 5153c4c545e3a45610a7100529ceede0c60b4413 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Sat, 4 Feb 2023 17:20:53 +0800
-Subject: [PATCH 3/6] hw/block/m25p80: add device w25q128
+Date: Tue, 14 Feb 2023 22:44:25 +0800
+Subject: [PATCH 3/6] hw/block/m25p80: add flash id w25q128.
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
