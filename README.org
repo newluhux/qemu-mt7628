@@ -121,3 +121,5 @@ same with qemu
 2022/02/13:  write a ethernet emulate, uboot bootp can working.
 
 2022/02/14:  fix ethernet recive missing some packet, add ohci.
+
+2022/02/15:  spi control support two cs line.

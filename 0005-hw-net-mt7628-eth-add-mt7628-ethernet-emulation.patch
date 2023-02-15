@@ -1,7 +1,7 @@
-From 4300065ddbc211bc73c38be584b0cee9862b9166 Mon Sep 17 00:00:00 2001
+From 5a5579a36f88d5e25bc10eb8c40b82a60aed5f10 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Tue, 14 Feb 2023 22:46:01 +0800
-Subject: [PATCH 5/6] hw/net/mt7628-eth: add mt7628 ethernet emulation.
+Date: Wed, 15 Feb 2023 22:18:09 +0800
+Subject: [PATCH 5/6] hw/net/mt7628-eth: add mt7628 ethernet emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
@@ -13,7 +13,7 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  create mode 100644 include/hw/net/mt7628-eth.h
 
 diff --git a/hw/net/meson.build b/hw/net/meson.build
-index ebac261542..483265fd21 100644
+index 4285145715..de03307d5e 100644
 --- a/hw/net/meson.build
 +++ b/hw/net/meson.build
 @@ -27,6 +27,7 @@ softmmu_ss.add(when: 'CONFIG_ALLWINNER_SUN8I_EMAC', if_true: files('allwinner-su

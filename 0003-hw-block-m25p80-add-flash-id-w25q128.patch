@@ -1,7 +1,7 @@
-From 5153c4c545e3a45610a7100529ceede0c60b4413 Mon Sep 17 00:00:00 2001
+From 1a5c6921feb6111e9179e55c96e30724f4a00ac0 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Tue, 14 Feb 2023 22:44:25 +0800
-Subject: [PATCH 3/6] hw/block/m25p80: add flash id w25q128.
+Date: Wed, 15 Feb 2023 22:16:56 +0800
+Subject: [PATCH 3/6] hw/block/m25p80: add flash id w25q128
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
@@ -9,10 +9,10 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/hw/block/m25p80.c b/hw/block/m25p80.c
-index 02adc87527..5e228b0d0a 100644
+index 802d2eb021..f7f65e0f9d 100644
 --- a/hw/block/m25p80.c
 +++ b/hw/block/m25p80.c
-@@ -345,6 +345,7 @@ static const FlashPartInfo known_devices[] = {
+@@ -346,6 +346,7 @@ static const FlashPartInfo known_devices[] = {
      { INFO("w25q64",      0xef4017,      0,  64 << 10, 128, ER_4K) },
      { INFO("w25q80",      0xef5014,      0,  64 << 10,  16, ER_4K) },
      { INFO("w25q80bl",    0xef4014,      0,  64 << 10,  16, ER_4K) },
