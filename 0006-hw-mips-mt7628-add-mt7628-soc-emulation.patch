@@ -1,6 +1,6 @@
-From 349e7b42a799e38167948173150f3c2293d9dec9 Mon Sep 17 00:00:00 2001
+From 98624df98bd569addf5e89e92bde1fb8440c4afd Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 15 Feb 2023 22:18:50 +0800
+Date: Thu, 16 Feb 2023 22:49:47 +0800
 Subject: [PATCH 6/6] hw/mips/mt7628: add mt7628 soc emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
@@ -8,9 +8,9 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  configs/devices/mips-softmmu/common.mak |   1 +
  hw/mips/Kconfig                         |  12 +
  hw/mips/meson.build                     |   1 +
- hw/mips/mt7628.c                        | 370 ++++++++++++++++++++++++
- include/hw/mips/mt7628.h                |  84 ++++++
- 5 files changed, 468 insertions(+)
+ hw/mips/mt7628.c                        | 348 ++++++++++++++++++++++++
+ include/hw/mips/mt7628.h                |  83 ++++++
+ 5 files changed, 445 insertions(+)
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 include/hw/mips/mt7628.h
 
@@ -60,10 +60,10 @@ index 900613fc08..98fc904917 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..6d3cacf404
+index 0000000000..f5df7413c0
 --- /dev/null
 +++ b/hw/mips/mt7628.c
-@@ -0,0 +1,370 @@
+@@ -0,0 +1,348 @@
 +/*
 + * QEMU/mt7628 emulation
 + *
@@ -201,6 +201,8 @@ index 0000000000..6d3cacf404
 +    mt7628SpiState *spi_bus = &s->spi;
 +    sysbus_realize(SYS_BUS_DEVICE(spi_bus), &error_fatal);
 +    sysbus_mmio_map(SYS_BUS_DEVICE(spi_bus), 0, s->memmap[MT7628_DEV_SPI]);
++    sysbus_mmio_map(SYS_BUS_DEVICE(spi_bus), 1,
++                    s->memmap[MT7628_DEV_FLASH_DIRECT]);
 +
 +    /* spi nor flash, default attach a w25q128 (16 MiB) */
 +    DriveInfo *dinfo = drive_get(IF_MTD, 0, 0);
@@ -214,30 +216,6 @@ index 0000000000..6d3cacf404
 +        sysbus_connect_irq(SYS_BUS_DEVICE(spi_bus), 0, cs_line);
 +    }
 +
-+    /*
-+     * drive same with spi_flash, but it serve spi flash first 4 MiB as a rom
-+     * use this command to create it:
-+     * dd if=flash_16M.bin bs=1M count=4 of=flash_4M.bin
-+     */
-+    DeviceState *rom;
-+    dinfo = drive_get(IF_PFLASH, 0, 0);
-+    if (dinfo) {
-+        rom = qdev_new(TYPE_PFLASH_CFI01);
-+        qdev_prop_set_drive(rom, "drive", blk_by_legacy_dinfo(dinfo));
-+        qdev_prop_set_uint32(rom, "num-blocks", 1024);
-+        qdev_prop_set_uint64(rom, "sector-length", 4096);
-+        qdev_prop_set_uint8(rom, "width", 2);
-+        qdev_prop_set_uint8(rom, "device-width", 2);
-+        qdev_prop_set_bit(rom, "big-endian", false);
-+        qdev_prop_set_string(rom, "name", "mt7628.rom");
-+        sysbus_realize_and_unref(SYS_BUS_DEVICE(rom), &error_fatal);
-+        sysbus_mmio_map(SYS_BUS_DEVICE(rom), 0,
-+                        s->memmap[MT7628_DEV_FLASH_DIRECT]);
-+    } else {
-+        create_unimplemented_device("flash-direct",
-+                                    s->memmap[MT7628_DEV_FLASH_DIRECT],
-+                                    4 * MiB);
-+    }
 +
 +    /* UART x 3 */
 +    SerialMM *smm;
@@ -436,10 +414,10 @@ index 0000000000..6d3cacf404
 +DEFINE_MACHINE("mt7628", mt7628_machine_init)
 diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
 new file mode 100644
-index 0000000000..e4ae2905a2
+index 0000000000..d4190406b6
 --- /dev/null
 +++ b/include/hw/mips/mt7628.h
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,83 @@
 +/*
 + * MT7628 System on Chip emulation
 + *
@@ -520,7 +498,6 @@ index 0000000000..e4ae2905a2
 +    EHCISysBusState ehci;
 +    OHCISysBusState ohci;
 +    mt7628EthState eth;
-+    MemoryRegion flash_direct;
 +};
 +
 +#endif /* HW_MIPS_MT7628_H */

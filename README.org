@@ -123,3 +123,5 @@ same with qemu
 2022/02/14:  fix ethernet recive missing some packet, add ohci.
 
 2022/02/15:  spi control support two cs line.
+
+2022/02/16:  flash direct access is provide by spi controller.

@@ -1,6 +1,6 @@
-From 5d4df8ab275b10b8ea5129e10c251fda85c12d1f Mon Sep 17 00:00:00 2001
+From a4a5b439523aad55eb20fbfb358ffd4e19e0faa5 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 15 Feb 2023 22:16:25 +0800
+Date: Thu, 16 Feb 2023 22:47:46 +0800
 Subject: [PATCH 2/6] hw/intc/mt7628-intc: add mt7628 interrupt control
  emulation
 
@@ -9,8 +9,8 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  hw/intc/Kconfig               |   3 +
  hw/intc/meson.build           |   1 +
  hw/intc/mt7628-intc.c         | 155 ++++++++++++++++++++++++++++++++++
- include/hw/intc/mt7628-intc.h |  36 ++++++++
- 4 files changed, 195 insertions(+)
+ include/hw/intc/mt7628-intc.h |  37 ++++++++
+ 4 files changed, 196 insertions(+)
  create mode 100644 hw/intc/mt7628-intc.c
  create mode 100644 include/hw/intc/mt7628-intc.h
 
@@ -197,14 +197,15 @@ index 0000000000..f900bf502f
 +type_init(mt7628_register_types);
 diff --git a/include/hw/intc/mt7628-intc.h b/include/hw/intc/mt7628-intc.h
 new file mode 100644
-index 0000000000..bceff4ce2c
+index 0000000000..aeb04b7226
 --- /dev/null
 +++ b/include/hw/intc/mt7628-intc.h
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,37 @@
 +#ifndef MT7628_INTC_H
 +#define MT7628_INTC_H
 +
-+/* some code from linux kernel:
++/*
++ * some code from linux kernel:
 + * arch/mips/ralink/irq.c
 + * Copyright (C) 2009 Gabor Juhos <juhosg@openwrt.org>
 + * Copyright (C) 2013 John Crispin <john@phrozen.org>

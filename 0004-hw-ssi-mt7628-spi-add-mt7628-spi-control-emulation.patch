@@ -1,15 +1,15 @@
-From 97c67a682669993843dc0f0633096991979577e0 Mon Sep 17 00:00:00 2001
+From 02f7b9f552fa0003e3a04f35f2ebb909838a4dd7 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Wed, 15 Feb 2023 22:17:42 +0800
+Date: Thu, 16 Feb 2023 22:48:56 +0800
 Subject: [PATCH 4/6] hw/ssi/mt7628-spi: add mt7628 spi control emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  hw/ssi/Kconfig              |   4 +
  hw/ssi/meson.build          |   1 +
- hw/ssi/mt7628-spi.c         | 290 ++++++++++++++++++++++++++++++++++++
- include/hw/ssi/mt7628-spi.h |  48 ++++++
- 4 files changed, 343 insertions(+)
+ hw/ssi/mt7628-spi.c         | 365 ++++++++++++++++++++++++++++++++++++
+ include/hw/ssi/mt7628-spi.h |  62 ++++++
+ 4 files changed, 432 insertions(+)
  create mode 100644 hw/ssi/mt7628-spi.c
  create mode 100644 include/hw/ssi/mt7628-spi.h
 
@@ -36,12 +36,12 @@ index 702aa5e4df..82c7972a91 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628_SPI', if_true: files('mt7628-spi.c'))
 diff --git a/hw/ssi/mt7628-spi.c b/hw/ssi/mt7628-spi.c
 new file mode 100644
-index 0000000000..dc3566e3ff
+index 0000000000..89d8753030
 --- /dev/null
 +++ b/hw/ssi/mt7628-spi.c
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,365 @@
 +/*
-+ * mt7628 spi master control
++ * mt7628 spi master emulation
 + *
 + * Copyright (c) 2023 Lu Hui <luhux76@gmail.com>
 + * some code from linux kernel:
@@ -49,6 +49,8 @@ index 0000000000..dc3566e3ff
 + * Copyright (C) 2011 Sergiy <piratfm@gmail.com>
 + * Copyright (C) 2011-2013 Gabor Juhos <juhosg@openwrt.org>
 + * Copyright (C) 2014-2015 Felix Fietkau <nbd@nbd.name>
++ * some code from ./npcm7xx_fiu.c
++ * Copyright 2020 Google LLC
 + *
 + * This program is free software; you can redistribute it and/or modify it
 + * under the terms and conditions of the GNU General Public License,
@@ -74,11 +76,10 @@ index 0000000000..dc3566e3ff
 +
 +/*
 + * TODO:
-+ * chip select
 + * byte order select
 + */
 +
-+/* #define DEBUG_MT7628_SPI */
++/* #define DEBUG_MT7628_SPI 1 */
 +
 +#ifdef DEBUG_MT7628_SPI
 +#define DPRINTF(fmt, ...) \
@@ -111,6 +112,20 @@ index 0000000000..dc3566e3ff
 +#define MOREBUF_CMDBITCNT   24
 +#define MASTER_BUFMODE      2
 +#define MASTER_FULL_DUPLEX  10
++
++static void mt7628_spi_update_select(mt7628SpiState *s)
++{
++    int i;
++    for (i = 0; i < 2; i++) {
++        if (s->cs_status[i]) {
++            DPRINTF("%s: cs %d assert\n", __func__, i);
++            qemu_irq_lower(s->cs_lines[i]);
++        } else {
++            DPRINTF("%s: cs %d deassert\n", __func__, i);
++            qemu_irq_raise(s->cs_lines[i]);
++        }
++    }
++}
 +
 +static void mt7628_spi_transfer(mt7628SpiState *s)
 +{
@@ -169,10 +184,10 @@ index 0000000000..dc3566e3ff
 +    s->cmd_bitcount = 0;
 +    s->opcode = 0;
 +    memset(s->dido, 0x0, MT7628_SPI_RX_BUFSIZE);
-+    s->cs[0] = 0;
-+    s->cs[1] = 0;
-+    qemu_set_irq(s->cs_lines[0], !(s->cs[0]));
-+    qemu_set_irq(s->cs_lines[1], !(s->cs[1]));
++    s->cs_status[0] = 0;
++    s->cs_status[1] = 0;
++    mt7628_spi_update_select(s);
++    s->flash_read_cmd = 0x03;
 +}
 +
 +static uint64_t mt7628_spi_read(void *opaque, hwaddr addr, unsigned int size)
@@ -214,8 +229,8 @@ index 0000000000..dc3566e3ff
 +        val |= s->full_duplex << MASTER_FULL_DUPLEX;
 +        return val;
 +    case REG_SPI_CS_POLAR:
-+        val |= s->cs[0] << 0;
-+        val |= s->cs[1] << 1;
++        val |= s->cs_status[0] << 0;
++        val |= s->cs_status[1] << 1;
 +        return val;
 +    default:
 +        return 0x0;
@@ -270,10 +285,9 @@ index 0000000000..dc3566e3ff
 +        s->full_duplex = test_bit(MASTER_FULL_DUPLEX, (void *)&value);
 +        break;
 +    case REG_SPI_CS_POLAR:
-+        s->cs[0] = test_bit(0, (void *)&value);
-+        s->cs[1] = test_bit(1, (void *)&value);
-+        qemu_set_irq(s->cs_lines[0], !(s->cs[0]));
-+        qemu_set_irq(s->cs_lines[1], !(s->cs[1]));
++        s->cs_status[0] = test_bit(0, (void *)&value);
++        s->cs_status[1] = test_bit(1, (void *)&value);
++        mt7628_spi_update_select(s);
 +        break;
 +    default:
 +        break;
@@ -281,6 +295,49 @@ index 0000000000..dc3566e3ff
 +    if (s->trans_start) {
 +        mt7628_spi_transfer(s);
 +    }
++}
++
++static uint64_t mt7628_spi_flash_read(void *opaque, hwaddr addr,
++                                      unsigned int size)
++{
++    struct mt7628SpiFlash *f = opaque;
++    mt7628SpiState *s = f->spi;
++    uint64_t val = 0;
++    uint32_t i;
++
++    DPRINTF("%s: read %x size %x\n", __func__, (uint32_t)addr, size);
++    s->trans_busy = 1;
++    s->cs_status[0] = 1;
++    s->cs_status[1] = 0;
++    mt7628_spi_update_select(s);
++
++    ssi_transfer(s->spi, s->flash_read_cmd);
++    ssi_transfer(s->spi, extract32(addr, 16, 8));
++    ssi_transfer(s->spi, extract32(addr, 8, 8));
++    ssi_transfer(s->spi, extract32(addr, 0, 8));
++
++    for (i = 0; i < size; i++) {
++        val = deposit64(val, 8 * i, 8, ssi_transfer(s->spi, 0));
++    }
++
++    s->cs_status[0] = 0;
++    s->cs_status[1] = 0;
++    mt7628_spi_update_select(s);
++    s->trans_busy = 0;
++    DPRINTF("%s: read %x size %x\n", __func__, (uint32_t)addr, size);
++
++    return val;
++}
++
++static void mt7628_spi_flash_write(void *opaque, hwaddr addr, uint64_t v,
++                                   unsigned int size)
++{
++    /* write is not support */
++    (void) opaque;
++    (void) addr;
++    (void) v;
++    (void) size;
++    return;
 +}
 +
 +static const MemoryRegionOps mt7628_spi_ops = {
@@ -291,6 +348,17 @@ index 0000000000..dc3566e3ff
 +        .min_access_size = 4,
 +        .max_access_size = 4
 +    }
++};
++
++static const MemoryRegionOps mt7628_spi_flash_ops = {
++    .read = mt7628_spi_flash_read,
++    .write = mt7628_spi_flash_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .valid = {
++        .min_access_size = 1,
++        .max_access_size = 8,
++        .unaligned = true,
++    },
 +};
 +
 +static void mt7628_spi_realize(DeviceState *dev, Error **errp)
@@ -304,6 +372,13 @@ index 0000000000..dc3566e3ff
 +    memory_region_init_io(&s->mmio, OBJECT(s), &mt7628_spi_ops, s,
 +                          TYPE_MT7628_SPI, 0xFF);
 +    sysbus_init_mmio(sbd, &s->mmio);
++
++    mt7628SpiFlash *flash = &s->flash;
++    flash->spi = s;
++    memory_region_init_io(&flash->direct_access,
++                          OBJECT(s), &mt7628_spi_flash_ops, &s->flash,
++                          "flash-direct", MT7628_SPI_FLASH_WINDOW_SIZE);
++    sysbus_init_mmio(sbd, &flash->direct_access);
 +
 +    sysbus_init_irq(sbd, &s->cs_lines[0]);
 +    sysbus_init_irq(sbd, &s->cs_lines[1]);
@@ -332,10 +407,10 @@ index 0000000000..dc3566e3ff
 +type_init(mt7628_spi_register_types)
 diff --git a/include/hw/ssi/mt7628-spi.h b/include/hw/ssi/mt7628-spi.h
 new file mode 100644
-index 0000000000..da028362b2
+index 0000000000..208c28727d
 --- /dev/null
 +++ b/include/hw/ssi/mt7628-spi.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,62 @@
 +/*
 + * mt7628 spi master
 + *
@@ -351,20 +426,30 @@ index 0000000000..da028362b2
 +
 +#include "hw/sysbus.h"
 +#include "qom/object.h"
++#include "qemu/units.h"
 +
 +#define TYPE_MT7628_SPI "mt7628-spi"
 +OBJECT_DECLARE_SIMPLE_TYPE(mt7628SpiState, MT7628_SPI)
 +
 +#define MT7628_SPI_TX_BUFSIZE (36)
 +#define MT7628_SPI_RX_BUFSIZE (32)
++#define MT7628_SPI_FLASH_WINDOW_SIZE (4 * MiB)
++
++typedef struct mt7628SpiState mt7628SpiState;
++typedef struct mt7628SpiFlash mt7628SpiFlash;
++
++typedef struct mt7628SpiFlash {
++    mt7628SpiState *spi;
++    MemoryRegion direct_access;
++} mt7628SpiFlash;
 +
 +struct mt7628SpiState {
 +    SysBusDevice parent_obj;
 +    MemoryRegion mmio;
 +    SSIBus *spi;
 +
-+    /* real device only support cs0 and cs1 */
-+    bool cs[2];           /* value: 0 deassert, 1 assert */
++    /* real device only support two cs */
++    bool cs_status[2];
 +    qemu_irq cs_lines[2];
 +
 +    bool bufmode;     /* 0 disable morebuf, 1 enable morebuf */
@@ -381,6 +466,10 @@ index 0000000000..da028362b2
 +    uint32_t opcode;
 +
 +    uint8_t dido[MT7628_SPI_RX_BUFSIZE];
++
++    /* flash direct access */
++    mt7628SpiFlash flash;
++    uint8_t flash_read_cmd;
 +};
 +
 +#endif
