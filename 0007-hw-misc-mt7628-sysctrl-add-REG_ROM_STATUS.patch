@@ -1,7 +1,7 @@
 From 6e78c51157600edeb3f6bbd1c947c8e38ce4a4b9 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Sun, 19 Feb 2023 11:12:28 +0800
-Subject: [PATCH 7/8] hw/misc/mt7628-sysctrl: add REG_ROM_STATUS
+Subject: [PATCH 7/9] hw/misc/mt7628-sysctrl: add REG_ROM_STATUS
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

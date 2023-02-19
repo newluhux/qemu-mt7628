@@ -1,7 +1,7 @@
 From 5c083fe8ecee04de441423d4e08804be89f1e92b Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Thu, 16 Feb 2023 22:49:24 +0800
-Subject: [PATCH 5/8] hw/net/mt7628-eth: add mt7628 ethernet emulation
+Subject: [PATCH 5/9] hw/net/mt7628-eth: add mt7628 ethernet emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

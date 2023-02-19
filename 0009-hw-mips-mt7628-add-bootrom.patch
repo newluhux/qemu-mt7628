@@ -1,0 +1,107 @@
+From 1c60a38e6a603094e5d979eaecebfed0956a63b2 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Sun, 19 Feb 2023 20:14:56 +0800
+Subject: [PATCH 9/9] hw/mips/mt7628: add bootrom
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ hw/mips/mt7628.c         | 28 +++++++++++++++++++++++++---
+ include/hw/mips/mt7628.h |  2 ++
+ 2 files changed, 27 insertions(+), 3 deletions(-)
+
+diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
+index 391210b0eb..5e6819fef5 100644
+--- a/hw/mips/mt7628.c
++++ b/hw/mips/mt7628.c
+@@ -7,6 +7,8 @@
+  * Copyright (c) 2007 Thiemo Seufer
+  * some code from linux kernel:
+  * arch/mips/boot/dts/ralink/mt7628a.dtsi
++ * arch/mips/ralink/bootrom.c
++ * Copyright (C) 2013 John Crispin <john@phrozen.org>
+  *
+  * This program is free software; you can redistribute it and/or modify it
+  * under the terms of the GNU General Public License as published by the
+@@ -64,6 +66,7 @@ const hwaddr mt7628_memmap[] = {
+     [MT7628_DEV_OHCI]         = 0x101C1000,
+     [MT7628_DEV_SPI]          = 0x10000B00,
+     [MT7628_DEV_ETH]          = 0x10100000,
++    [MT7628_DEV_BOOTROM]      = 0x10118000,
+     [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
+ };
+ 
+@@ -272,6 +275,7 @@ static void mt7628_board_init(MachineState *machine)
+     mt7628State *mt7628;
+     Clock *cpuclk;
+     ResetData *reset_info;
++    char *filename;
+ 
+     /* CPU limit */
+     if (strcmp(machine->cpu_type, MIPS_CPU_TYPE_NAME("24KEc")) != 0) {
+@@ -323,7 +327,6 @@ static void mt7628_board_init(MachineState *machine)
+     }
+ 
+     /*
+-     * PC register maybe at flash direct access address, after bootrom.
+      * I hexdump the mainline u-boot-spl.bin,
+      * begin of flash 4 bytes is a instruction use for jump.
+      * NOTE: uboot-with-spl.bin will loop at ddr_calibrate.
+@@ -333,14 +336,33 @@ static void mt7628_board_init(MachineState *machine)
+      */
+     reset_info = g_new0(ResetData, 1);
+     reset_info->cpu = mt7628->cpu;
+-    reset_info->vector = (target_long)(int32_t)0x9c000000;
+-    qemu_register_reset(main_cpu_reset, reset_info);
++    reset_info->vector = (target_long)(int32_t)
++                         (mt7628->memmap[MT7628_DEV_FLASH_DIRECT] + 0x80000000);
++    /*
++     * bootrom
++     * I found its definition in the Linux kernel source code.
++     */
++    memory_region_init_rom(&mt7628->bootrom, NULL, "mt7628.bootrom", 0x8000,
++                           &error_fatal);
++    memory_region_add_subregion(get_system_memory(),
++                                mt7628->memmap[MT7628_DEV_BOOTROM],
++                                &mt7628->bootrom);
++    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS,
++                              machine->firmware ?: BIOS_FILENAME);
++    if (filename) {
++        load_image_targphys(filename, mt7628->memmap[MT7628_DEV_BOOTROM],
++                            0x8000);
++        g_free(filename);
++        reset_info->vector = (target_long)(int32_t)
++                             (mt7628->memmap[MT7628_DEV_BOOTROM] + 0xA0000000);
++    }
+     /* Load kernel to RAM & goto kernel */
+     if (kernel_filename) {
+         loaderparams.ram_size = machine->ram_size;
+         loaderparams.kernel_filename = kernel_filename;
+         reset_info->vector = load_kernel();
+     }
++    qemu_register_reset(main_cpu_reset, reset_info);
+ }
+ 
+ static void mt7628_machine_init(MachineClass *mc)
+diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
+index d4190406b6..ffadabca93 100644
+--- a/include/hw/mips/mt7628.h
++++ b/include/hw/mips/mt7628.h
+@@ -51,6 +51,7 @@ enum {
+     MT7628_DEV_EHCI,
+     MT7628_DEV_OHCI,
+     MT7628_DEV_ETH,
++    MT7628_DEV_BOOTROM,
+     MT7628_DEV_FLASH_DIRECT,
+ };
+ 
+@@ -78,6 +79,7 @@ struct mt7628State {
+     EHCISysBusState ehci;
+     OHCISysBusState ohci;
+     mt7628EthState eth;
++    MemoryRegion bootrom;
+ };
+ 
+ #endif /* HW_MIPS_MT7628_H */
+-- 
+2.39.1
+

@@ -35,9 +35,11 @@ If you not skip ddr_calibrate, you will take a lot of time at memory test,
 
 but uboot still can bootup, test on mainline uboot.
 
-* bootrom
+* bootrom?
 
-I not found any bootrom from real device, maybe not mapped to memory.
+I can't found it on real board.
+
+I am going to write a simple bootrom to initialize the device, only use for qemu.
 
 * how to run it
 
@@ -140,4 +142,4 @@ same with qemu
 2022/02/16:  flash direct access is provide by spi controller.
 
 2022/02/19:  now, you can boot from flash, but need skip ddr_calibrate,
-             please read source code.
+             please read source code, support bootrom.
