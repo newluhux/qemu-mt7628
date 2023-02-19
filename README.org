@@ -10,7 +10,7 @@ I'm try add mt7628 support into qemu.
 | SYSCTL       | OK     | uboot ok, linux ok   |
 | INTC         | OK     | linux ok             |
 | TIMER        | TODO   |                      |
-| MEMC         | TODO   | uboot spl failed     |
+| MEMC         | TODO   |                      |
 | UART         | OK     | uboot ok, linux ok   |
 | HSUART       | TODO   |                      |
 | I2C          | TODO   |                      |
@@ -30,6 +30,10 @@ I'm try add mt7628 support into qemu.
 You can boot from flash, but need skip 'ddr_calibrate':
 
 Disassemble uboot.bin, find the location of the ddr_calibrate function, and then use hexedit to modify it so that it can skip ddr initialization (because qemu does not emulate it).
+
+If you not skip ddr_calibrate, you will take a lot of time at memory test,
+
+but uboot still can bootup, test on mainline uboot.
 
 * bootrom
 
