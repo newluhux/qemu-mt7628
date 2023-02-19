@@ -1,7 +1,7 @@
 From 02f7b9f552fa0003e3a04f35f2ebb909838a4dd7 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Thu, 16 Feb 2023 22:48:56 +0800
-Subject: [PATCH 4/6] hw/ssi/mt7628-spi: add mt7628 spi control emulation
+Subject: [PATCH 4/8] hw/ssi/mt7628-spi: add mt7628 spi control emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

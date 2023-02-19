@@ -1,0 +1,35 @@
+From 6e78c51157600edeb3f6bbd1c947c8e38ce4a4b9 Mon Sep 17 00:00:00 2001
+From: LuHui <luhux76@gmail.com>
+Date: Sun, 19 Feb 2023 11:12:28 +0800
+Subject: [PATCH 7/8] hw/misc/mt7628-sysctrl: add REG_ROM_STATUS
+
+Signed-off-by: LuHui <luhux76@gmail.com>
+---
+ hw/misc/mt7628-sysctrl.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/misc/mt7628-sysctrl.c b/hw/misc/mt7628-sysctrl.c
+index 4c71ad641a..ba9e875966 100644
+--- a/hw/misc/mt7628-sysctrl.c
++++ b/hw/misc/mt7628-sysctrl.c
+@@ -46,6 +46,7 @@ enum {
+     REG_EFUSE_CFG = 0x08,
+     REG_CHIP_REV = 0x0C,
+     REG_SYS_CFG0 = 0x10,
++    REG_ROM_STATUS = 0x28,
+     REG_RST_CTRL = 0x34,
+ };
+ 
+@@ -81,6 +82,9 @@ static uint64_t mt7628_sysctrl_read(void *opaque, hwaddr addr,
+         val |= s->dram_type << DRAM_TYPE_SHIFT;
+         val |= s->xtal_freq << XTAL_FREQ_SHIFT;
+         return val;
++    case REG_ROM_STATUS:
++        val = 0x1; /* always done */
++        return val;
+     case REG_RST_CTRL:
+         val |= s->reset_system << RST_SYSTEM_SHIFT;
+         return val;
+-- 
+2.39.1
+

@@ -1,7 +1,7 @@
 From 5c1a939ba62fdc9e8509728d7a6709cdca48f9b2 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Thu, 16 Feb 2023 22:47:14 +0800
-Subject: [PATCH 1/6] hw/misc/mt7628-sysctrl: add mt7628 system control
+Subject: [PATCH 1/8] hw/misc/mt7628-sysctrl: add mt7628 system control
  emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>

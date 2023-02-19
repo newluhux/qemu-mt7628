@@ -1,7 +1,7 @@
 From a4a5b439523aad55eb20fbfb358ffd4e19e0faa5 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Thu, 16 Feb 2023 22:47:46 +0800
-Subject: [PATCH 2/6] hw/intc/mt7628-intc: add mt7628 interrupt control
+Subject: [PATCH 2/8] hw/intc/mt7628-intc: add mt7628 interrupt control
  emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>

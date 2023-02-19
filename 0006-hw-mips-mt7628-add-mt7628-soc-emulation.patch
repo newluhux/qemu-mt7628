@@ -1,7 +1,7 @@
 From 98624df98bd569addf5e89e92bde1fb8440c4afd Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
 Date: Thu, 16 Feb 2023 22:49:47 +0800
-Subject: [PATCH 6/6] hw/mips/mt7628: add mt7628 soc emulation
+Subject: [PATCH 6/8] hw/mips/mt7628: add mt7628 soc emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---

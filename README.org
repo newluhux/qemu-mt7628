@@ -25,6 +25,16 @@ I'm try add mt7628 support into qemu.
 | GPIO         | TODO   |                      |
 | PCIE         | TODO   |                      |
 
+* boot from flash
+
+You can boot from flash, but need skip 'ddr_calibrate':
+
+Disassemble uboot.bin, find the location of the ddr_calibrate function, and then use hexedit to modify it so that it can skip ddr initialization (because qemu does not emulate it).
+
+* bootrom
+
+I not found any bootrom from real device, maybe not mapped to memory.
+
 * how to run it
 
 1. use buildroot build firmware: https://github.com/newluhux/vocore2/tree/master/buildroot
@@ -124,3 +134,6 @@ same with qemu
 2022/02/15:  spi control support two cs line.
 
 2022/02/16:  flash direct access is provide by spi controller.
+
+2022/02/19:  now, you can boot from flash, but need skip ddr_calibrate,
+             please read source code.
