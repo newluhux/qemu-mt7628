@@ -1,16 +1,16 @@
-From 98624df98bd569addf5e89e92bde1fb8440c4afd Mon Sep 17 00:00:00 2001
+From 6c0efec7d4f90cb3a4c92ebc0993ba8cdf1d1fa4 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Thu, 16 Feb 2023 22:49:47 +0800
-Subject: [PATCH 6/9] hw/mips/mt7628: add mt7628 soc emulation
+Date: Tue, 14 Mar 2023 18:03:56 +0800
+Subject: [PATCH 6/6] hw/mips/mt7628: add mt7628 soc emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  configs/devices/mips-softmmu/common.mak |   1 +
  hw/mips/Kconfig                         |  12 +
  hw/mips/meson.build                     |   1 +
- hw/mips/mt7628.c                        | 348 ++++++++++++++++++++++++
- include/hw/mips/mt7628.h                |  83 ++++++
- 5 files changed, 445 insertions(+)
+ hw/mips/mt7628.c                        | 380 ++++++++++++++++++++++++
+ include/hw/mips/mt7628.h                |  85 ++++++
+ 5 files changed, 479 insertions(+)
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 include/hw/mips/mt7628.h
 
@@ -60,10 +60,10 @@ index 900613fc08..98fc904917 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..f5df7413c0
+index 0000000000..5e6819fef5
 --- /dev/null
 +++ b/hw/mips/mt7628.c
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,380 @@
 +/*
 + * QEMU/mt7628 emulation
 + *
@@ -73,6 +73,8 @@ index 0000000000..f5df7413c0
 + * Copyright (c) 2007 Thiemo Seufer
 + * some code from linux kernel:
 + * arch/mips/boot/dts/ralink/mt7628a.dtsi
++ * arch/mips/ralink/bootrom.c
++ * Copyright (C) 2013 John Crispin <john@phrozen.org>
 + *
 + * This program is free software; you can redistribute it and/or modify it
 + * under the terms of the GNU General Public License as published by the
@@ -130,6 +132,7 @@ index 0000000000..f5df7413c0
 +    [MT7628_DEV_OHCI]         = 0x101C1000,
 +    [MT7628_DEV_SPI]          = 0x10000B00,
 +    [MT7628_DEV_ETH]          = 0x10100000,
++    [MT7628_DEV_BOOTROM]      = 0x10118000,
 +    [MT7628_DEV_FLASH_DIRECT] = 0x1C000000,
 +};
 +
@@ -338,6 +341,7 @@ index 0000000000..f5df7413c0
 +    mt7628State *mt7628;
 +    Clock *cpuclk;
 +    ResetData *reset_info;
++    char *filename;
 +
 +    /* CPU limit */
 +    if (strcmp(machine->cpu_type, MIPS_CPU_TYPE_NAME("24KEc")) != 0) {
@@ -387,16 +391,44 @@ index 0000000000..f5df7413c0
 +                                    machine->ram_size,
 +                                    (256 * MiB) - machine->ram_size);
 +    }
-+    /* Load kernel to RAM & goto kernel */
++
++    /*
++     * I hexdump the mainline u-boot-spl.bin,
++     * begin of flash 4 bytes is a instruction use for jump.
++     * NOTE: uboot-with-spl.bin will loop at ddr_calibrate.
++     * TODO: emulate ddr_calibrate?.
++     * No, you can simple skip it, use your hex editor.
++     * qemu's DDR is always working, don't need care about it.
++     */
 +    reset_info = g_new0(ResetData, 1);
 +    reset_info->cpu = mt7628->cpu;
-+    reset_info->vector = reset_info->cpu->env.active_tc.PC;
-+    qemu_register_reset(main_cpu_reset, reset_info);
++    reset_info->vector = (target_long)(int32_t)
++                         (mt7628->memmap[MT7628_DEV_FLASH_DIRECT] + 0x80000000);
++    /*
++     * bootrom
++     * I found its definition in the Linux kernel source code.
++     */
++    memory_region_init_rom(&mt7628->bootrom, NULL, "mt7628.bootrom", 0x8000,
++                           &error_fatal);
++    memory_region_add_subregion(get_system_memory(),
++                                mt7628->memmap[MT7628_DEV_BOOTROM],
++                                &mt7628->bootrom);
++    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS,
++                              machine->firmware ?: BIOS_FILENAME);
++    if (filename) {
++        load_image_targphys(filename, mt7628->memmap[MT7628_DEV_BOOTROM],
++                            0x8000);
++        g_free(filename);
++        reset_info->vector = (target_long)(int32_t)
++                             (mt7628->memmap[MT7628_DEV_BOOTROM] + 0xA0000000);
++    }
++    /* Load kernel to RAM & goto kernel */
 +    if (kernel_filename) {
 +        loaderparams.ram_size = machine->ram_size;
 +        loaderparams.kernel_filename = kernel_filename;
 +        reset_info->vector = load_kernel();
 +    }
++    qemu_register_reset(main_cpu_reset, reset_info);
 +}
 +
 +static void mt7628_machine_init(MachineClass *mc)
@@ -414,10 +446,10 @@ index 0000000000..f5df7413c0
 +DEFINE_MACHINE("mt7628", mt7628_machine_init)
 diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
 new file mode 100644
-index 0000000000..d4190406b6
+index 0000000000..ffadabca93
 --- /dev/null
 +++ b/include/hw/mips/mt7628.h
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,85 @@
 +/*
 + * MT7628 System on Chip emulation
 + *
@@ -471,6 +503,7 @@ index 0000000000..d4190406b6
 +    MT7628_DEV_EHCI,
 +    MT7628_DEV_OHCI,
 +    MT7628_DEV_ETH,
++    MT7628_DEV_BOOTROM,
 +    MT7628_DEV_FLASH_DIRECT,
 +};
 +
@@ -498,9 +531,10 @@ index 0000000000..d4190406b6
 +    EHCISysBusState ehci;
 +    OHCISysBusState ohci;
 +    mt7628EthState eth;
++    MemoryRegion bootrom;
 +};
 +
 +#endif /* HW_MIPS_MT7628_H */
 -- 
-2.39.1
+2.35.7
 

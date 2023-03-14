@@ -1,15 +1,15 @@
-From 02f7b9f552fa0003e3a04f35f2ebb909838a4dd7 Mon Sep 17 00:00:00 2001
+From 55012120aea4f9d9af87232b4144b5baad1dbe3b Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Thu, 16 Feb 2023 22:48:56 +0800
-Subject: [PATCH 4/9] hw/ssi/mt7628-spi: add mt7628 spi control emulation
+Date: Tue, 14 Mar 2023 18:02:55 +0800
+Subject: [PATCH 4/6] hw/ssi/mt7628-spi: add mt7628 spi controller
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
  hw/ssi/Kconfig              |   4 +
  hw/ssi/meson.build          |   1 +
- hw/ssi/mt7628-spi.c         | 365 ++++++++++++++++++++++++++++++++++++
+ hw/ssi/mt7628-spi.c         | 364 ++++++++++++++++++++++++++++++++++++
  include/hw/ssi/mt7628-spi.h |  62 ++++++
- 4 files changed, 432 insertions(+)
+ 4 files changed, 431 insertions(+)
  create mode 100644 hw/ssi/mt7628-spi.c
  create mode 100644 include/hw/ssi/mt7628-spi.h
 
@@ -26,7 +26,7 @@ index 7d90a02181..694e01ede1 100644
 +    bool
 +    select SSI
 diff --git a/hw/ssi/meson.build b/hw/ssi/meson.build
-index 702aa5e4df..82c7972a91 100644
+index 904a47161a..b6ff104c34 100644
 --- a/hw/ssi/meson.build
 +++ b/hw/ssi/meson.build
 @@ -11,3 +11,4 @@ softmmu_ss.add(when: 'CONFIG_XLNX_VERSAL', if_true: files('xlnx-versal-ospi.c'))
@@ -36,10 +36,10 @@ index 702aa5e4df..82c7972a91 100644
 +softmmu_ss.add(when: 'CONFIG_MT7628_SPI', if_true: files('mt7628-spi.c'))
 diff --git a/hw/ssi/mt7628-spi.c b/hw/ssi/mt7628-spi.c
 new file mode 100644
-index 0000000000..89d8753030
+index 0000000000..9cf21488cd
 --- /dev/null
 +++ b/hw/ssi/mt7628-spi.c
-@@ -0,0 +1,365 @@
+@@ -0,0 +1,364 @@
 +/*
 + * mt7628 spi master emulation
 + *
@@ -238,11 +238,10 @@ index 0000000000..89d8753030
 +}
 +
 +static void mt7628_spi_write(void *opaque, hwaddr addr,
-+                             uint64_t val64, unsigned int size)
++                             uint64_t value, unsigned int size)
 +{
 +    mt7628SpiState *s = opaque;
 +    uint32_t *data_reg = (uint32_t *)s->dido;
-+    uint32_t value = val64;
 +    switch (addr) {
 +    case REG_SPI_TRANS:
 +        /* trans_busy is RO */
@@ -474,5 +473,5 @@ index 0000000000..208c28727d
 +
 +#endif
 -- 
-2.39.1
+2.35.7
 

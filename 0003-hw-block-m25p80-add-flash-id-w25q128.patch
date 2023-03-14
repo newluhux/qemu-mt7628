@@ -1,7 +1,7 @@
-From f32d02acf759c2d981390299f78936cab6fdc8b1 Mon Sep 17 00:00:00 2001
+From b2cb5eec85488021c76e78ec366ca6b52da7e001 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Thu, 16 Feb 2023 22:48:26 +0800
-Subject: [PATCH 3/9] hw/block/m25p80: add flash id w25q128
+Date: Tue, 14 Mar 2023 18:02:23 +0800
+Subject: [PATCH 3/6] hw/block/m25p80: add flash id w25q128
 
 Signed-off-by: LuHui <luhux76@gmail.com>
 ---
@@ -21,5 +21,5 @@ index 802d2eb021..f7f65e0f9d 100644
        .sfdp_read = m25p80_sfdp_w25q256 },
      { INFO("w25q512jv",   0xef4020,      0,  64 << 10, 1024, ER_4K),
 -- 
-2.39.1
+2.35.7
 
