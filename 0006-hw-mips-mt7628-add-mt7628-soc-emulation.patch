@@ -1,6 +1,6 @@
-From 6c0efec7d4f90cb3a4c92ebc0993ba8cdf1d1fa4 Mon Sep 17 00:00:00 2001
+From b4099ee86a4c7bd1536a0dd06aca05f7d4a7e3f2 Mon Sep 17 00:00:00 2001
 From: LuHui <luhux76@gmail.com>
-Date: Tue, 14 Mar 2023 18:03:56 +0800
+Date: Fri, 17 Mar 2023 22:25:51 +0800
 Subject: [PATCH 6/6] hw/mips/mt7628: add mt7628 soc emulation
 
 Signed-off-by: LuHui <luhux76@gmail.com>
@@ -8,9 +8,9 @@ Signed-off-by: LuHui <luhux76@gmail.com>
  configs/devices/mips-softmmu/common.mak |   1 +
  hw/mips/Kconfig                         |  12 +
  hw/mips/meson.build                     |   1 +
- hw/mips/mt7628.c                        | 380 ++++++++++++++++++++++++
- include/hw/mips/mt7628.h                |  85 ++++++
- 5 files changed, 479 insertions(+)
+ hw/mips/mt7628.c                        | 382 ++++++++++++++++++++++++
+ include/hw/mips/mt7628.h                |  86 ++++++
+ 5 files changed, 482 insertions(+)
  create mode 100644 hw/mips/mt7628.c
  create mode 100644 include/hw/mips/mt7628.h
 
@@ -60,10 +60,10 @@ index 900613fc08..98fc904917 100644
  hw_arch += {'mips': mips_ss}
 diff --git a/hw/mips/mt7628.c b/hw/mips/mt7628.c
 new file mode 100644
-index 0000000000..5e6819fef5
+index 0000000000..37cbc41eb5
 --- /dev/null
 +++ b/hw/mips/mt7628.c
-@@ -0,0 +1,380 @@
+@@ -0,0 +1,382 @@
 +/*
 + * QEMU/mt7628 emulation
 + *
@@ -260,6 +260,8 @@ index 0000000000..5e6819fef5
 +    sysbus_realize(SYS_BUS_DEVICE(&s->eth), &error_fatal);
 +    sysbus_mmio_map(SYS_BUS_DEVICE(&s->eth), 0,
 +                    s->memmap[MT7628_DEV_ETH]);
++    sysbus_connect_irq(SYS_BUS_DEVICE(&s->eth), 0,
++                       env->irq[MT7628_CPU_IRQ_ETH]);
 +
 +    /* Unimplemented devices */
 +    for (i = 0; i < ARRAY_SIZE(unimplemented); i++) {
@@ -446,10 +448,10 @@ index 0000000000..5e6819fef5
 +DEFINE_MACHINE("mt7628", mt7628_machine_init)
 diff --git a/include/hw/mips/mt7628.h b/include/hw/mips/mt7628.h
 new file mode 100644
-index 0000000000..ffadabca93
+index 0000000000..7b46c24b43
 --- /dev/null
 +++ b/include/hw/mips/mt7628.h
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,86 @@
 +/*
 + * MT7628 System on Chip emulation
 + *
@@ -513,6 +515,7 @@ index 0000000000..ffadabca93
 +
 +enum {
 +    MT7628_CPU_IRQ_INTC = 2,
++    MT7628_CPU_IRQ_ETH  = 5,
 +};
 +
 +#define TYPE_MT7628 "mt7628"

@@ -4,26 +4,26 @@ I'm try add mt7628 support into qemu.
 
 * hardware support
 
-| hardware     | status | test result          |
-|--------------+--------+----------------------|
-| DDR 256MiB   | OK     | uboot ok, linux ok   |
-| SYSCTL       | OK     | uboot ok, linux ok   |
-| INTC         | OK     | linux ok             |
-| TIMER        | TODO   |                      |
-| MEMC         | TODO   |                      |
-| UART         | OK     | uboot ok, linux ok   |
-| HSUART       | TODO   |                      |
-| I2C          | TODO   |                      |
-| AUDIO        | TODO   |                      |
-| GDMA         | TODO   |                      |
-| SPI MASTER   | OK     | uboot ok, linux ok   |
-| EHCI         | OK     | uboot ok, linux ok   |
-| OHCI         | OK     | uboot ok, linux ok   |
-| FLASH-DIRECT | OK     | uboot ok, linux ok   |
-| ETHERNET     | OK     | uboot ok, linux fail |
-| SDXC         | TODO   |                      |
-| GPIO         | TODO   |                      |
-| PCIE         | TODO   |                      |
+| hardware     | status | test result                         |
+|--------------+--------+-------------------------------------|
+| DDR 256MiB   | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
+| SYSCTL       | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
+| INTC         | OK     | linux ok, NetBSD 9.0 ok             |
+| TIMER        | TODO   |                                     |
+| MEMC         | TODO   |                                     |
+| UART         | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
+| HSUART       | TODO   |                                     |
+| I2C          | TODO   |                                     |
+| AUDIO        | TODO   |                                     |
+| GDMA         | TODO   |                                     |
+| SPI MASTER   | OK     | uboot ok, linux ok                  |
+| EHCI         | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
+| OHCI         | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
+| FLASH-DIRECT | OK     | uboot ok                            |
+| ETHERNET     | OK     | uboot ok, linux fail, NetBSD 9.0 ok |
+| SDXC         | TODO   |                                     |
+| GPIO         | TODO   |                                     |
+| PCIE         | TODO   |                                     |
 
 * boot from flash
 
@@ -143,3 +143,6 @@ same with qemu
 
 2022/02/19:  now, you can boot from flash, but need skip ddr_calibrate,
              please read source code, support bootrom.
+
+2022/03/17:  rewrite ethernet emulation, add interrupt support,
+             network is pass on NetBSD 9.0
