@@ -20,7 +20,7 @@ I'm try add mt7628 support into qemu.
 | EHCI         | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
 | OHCI         | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
 | FLASH-DIRECT | OK     | uboot ok                            |
-| ETHERNET     | OK     | uboot ok, linux fail, NetBSD 9.0 ok |
+| ETHERNET     | OK     | uboot ok, linux ok, NetBSD 9.0 ok   |
 | SDXC         | TODO   |                                     |
 | GPIO         | TODO   |                                     |
 | PCIE         | TODO   |                                     |
@@ -146,3 +146,8 @@ same with qemu
 
 2022/03/17:  rewrite ethernet emulation, add interrupt support,
              network is pass on NetBSD 9.0
+
+2023/03/30:  my job is busy, haven't time to test it, now mt7628's ethernet
+	     can work on mainline openwrt.
+
+2023/03/31:  study i2c :), try impl i2c controller.
