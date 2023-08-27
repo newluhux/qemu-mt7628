@@ -1,3 +1,7 @@
+* project move
+
+new repo: https://github.com/newluhux/qemu-hui
+
 * qemu mt7628
 
 I'm try add mt7628 support into qemu.
